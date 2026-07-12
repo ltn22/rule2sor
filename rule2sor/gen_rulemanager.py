@@ -264,16 +264,11 @@ import json
 import struct
 import re
 import warnings
-import pprint
 import cbor2 as cbor
 
 from .gen_parameters import *
 
-enable_debug_print = False
 
-def dprint(*args, **kw):
-    if enable_debug_print:
-        print(*args, **kw)
 
 """
 .. module:: gen_rulemanager
@@ -427,7 +422,7 @@ class RuleManager:
             for e_rule in d["SoR"]: # check no overlaps on RuleID
                 left_aligned_e_ruleID = e_rule[T_RULEID] << (32 - e_rule[T_RULEIDLENGTH])
                 if left_aligned_e_ruleID == left_aligned_n_ruleID:
-                    dprint ("Warning; Rule {}/{} exists not inserted".format(bin(n_ruleID), n_ruleLength) )
+                    print ("Warning; Rule {}/{} exists not inserted".format(bin(n_ruleID), n_ruleLength) )
                     overlap = True
                     break
 
@@ -575,7 +570,6 @@ class RuleManager:
 
 
             if not'COAP.option' in r["FID"] and not r["FID"].upper() in FIELD__DEFAULT_PROPERTY  :
-                print(r)
                 raise ValueError( "Unkwown field id {} in rule {}/{}".format(
                     r["FID"], arule[T_RULEID],  arule[T_RULEIDLENGTH]
                 ))
@@ -599,7 +593,6 @@ class RuleManager:
                     if T_MO_VAL in r:
                         entry[T_MO_VAL] = r[T_MO_VAL]
                     else:
-                        print(r)
                         raise ValueError ("MO Value missing for {}".format(FID))
 
                 if T_TV in  r:
@@ -615,7 +608,6 @@ class RuleManager:
                         val = list(dic.values())[0]
 
 
-                        print ("---------> ", key, val)
                         entry[T_TV_IND] = adapt_value(key,entry[T_FL], FID)
                     else:
                         entry[T_TV] = adapt_value(r[T_TV], entry[T_FL], FID)
@@ -654,7 +646,6 @@ class RuleManager:
         self._log = log
         self._db = []
         self._sid_info = []
-        self.sid_key_mapping = {}
 
     def _smart_print(self, v):
         if type(v) is str:
@@ -794,31 +785,15 @@ class RuleManager:
         with open(name) as sid_file:
             sid_values = json.loads(sid_file.read())
 
-        if 'key-mapping' not in sid_values:
-            print ("""{} sid files has not been genreated with the --sid-extention options.\n\
-Some conversion capabilities may not works. see http://github.com/ltn22/pyang""".format(name)) 
-        else:
-            for k, v in sid_values['key-mapping'].items():
-                if k in self.sid_key_mapping:
-                    print ("key sid", k, "already present, ignoring...")
-                else: 
-                    self.sid_key_mapping[int(k)] = v
-            del(sid_values["key-mapping"])
-
-        pprint.pprint(sid_values)
         if "ietf-sid-file:sid-file" in sid_values:
             for e in sid_values["ietf-sid-file:sid-file"]["item"]:
-                print (e['sid'], type(e['sid']))
                 if type(e['sid']) is str:
                     e['sid'] = int(e['sid'], 0)
-                print (e['sid'], type(e['sid']))
             self._sid_info.append(sid_values["ietf-sid-file:sid-file"]['item'])
         elif "item" in sid_values:
             for e in sid_values["item"]:
-                print (e['sid'], type(e['sid']))
                 if type(e['sid']) is str:
                     e['sid'] = int(e['sid'], 0)
-                print (e['sid'], type(e['sid']))
             self._sid_info.append(sid_values['item'])
 
         else:
@@ -845,7 +820,6 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
         """
         Dump the rules in CORECONF format the rules inside the rule manager for a specific device.
         """
-        import binascii
 
         def dictify_cbor (val, ref_id):
             cbor_data = b''
@@ -899,13 +873,11 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                         nb_elm = 0
                         nb_entry += 1
 
-                        print(e[T_FID])
 
                         entry_cbor = \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/entry-index", space="data") - entry_sid) + \
                             cbor.dumps(entry_index)
                         
-                        print(binascii.hexlify(entry_cbor))
                         entry_index += 1
                         nb_elm += 1
 
@@ -918,7 +890,6 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                                 cbor.dumps(space_id) +\
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/universal-value", space="data") - entry_sid) + \
                                 cbor.dumps(option_id)
-                            print(binascii.hexlify(entry_cbor))
                             nb_elm += 2
                         else: # Field ID
                             field_id = self.sid_search_for(name=YANG_ID[e[T_FID]], space="identity")
@@ -934,7 +905,6 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
                                 cbor.dumps(l)
                         elif type(l) == str:
-                            print("Field length is a string:", l)
                             if l.find("length-byte") == 0:
 
                                 entry_cbor += \
@@ -944,7 +914,6 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
 
                                 # add option
                                 match = re.search(r"\((\d+)\)", l)
-                                print("length-byte option:", match.group(1))
                                 entry_cbor += \
                                     cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length-value", space="data") - entry_sid) + \
                                     cbor.dumps(int(match.group(1))) 
@@ -960,25 +929,21 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                         else:
                             raise ValueError("unknown field length value")
                         
-                        print(binascii.hexlify(entry_cbor))
                         nb_elm += 1
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-position", space="data") - entry_sid) + \
                             struct.pack('!B', e[T_FP])
-                        print(binascii.hexlify(entry_cbor))
                         nb_elm += 1
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/direction-indicator", space="data") - entry_sid) + \
                             cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_DI]], space="identity")) 
-                        print(binascii.hexlify(entry_cbor))
                         nb_elm += 1
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/matching-operator", space="data") - entry_sid) + \
                             cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_MO]], space="identity")) 
-                        print(binascii.hexlify(entry_cbor))
                         nb_elm += 1
 
                         if T_MO_VAL in e:
@@ -986,13 +951,11 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                             entry_cbor += \
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/matching-operator-value", space="data") - entry_sid) + \
                                 mo_val_cbor
-                            print(binascii.hexlify(entry_cbor))
                             nb_elm += 1
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/comp-decomp-action", space="data") - entry_sid) + \
                             cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_CDA]], space="identity")) 
-                        print(binascii.hexlify(entry_cbor))
                         nb_elm += 1
 
                         if T_TV in e and e[T_TV] != None:
@@ -1005,7 +968,6 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
 
                         entry_cbor = self.cbor_header (0b101_00000, nb_elm) + entry_cbor # header MAP and size
 
-                        print ("Entry CBOR:", binascii.hexlify(entry_cbor))
                         rule_content += entry_cbor
 
                     rule_content = b'\xA4' + \
@@ -1018,7 +980,6 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                         cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-nature", space="data") - rule_sid) +\
                         cbor.dumps(self.sid_search_for(name= "nature-compression", space="identity")) 
                     
-                    print ("rule content:", binascii.hexlify(rule_content))
                 elif T_FRAG in rule:
                     nb_elm = 3
                     rule_content = \
@@ -1073,7 +1034,6 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                 else:
                     raise ValueError("unkwon rule")
 
-                print ("Rule content:", binascii.hexlify(rule_content))
 
                 full_rules += rule_content        
             

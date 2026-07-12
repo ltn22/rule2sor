@@ -12,8 +12,6 @@ serialized with RuleManager.to_coreconf().
 
 import argparse
 import binascii
-import contextlib
-import io
 import os
 import sys
 
@@ -41,15 +39,13 @@ def main():
 
     rm = RuleManager()
     rm.Add(file=args.rule_file, device="test:device1")
+    rm.add_sid_file(args.sid)
 
-    if args.quiet:
-        with contextlib.redirect_stdout(io.StringIO()):
-            rm.add_sid_file(args.sid)
-            ycbor = rm.to_coreconf()
-    else:
+    if not args.quiet:
         rm.Print()
-        rm.add_sid_file(args.sid)
-        ycbor = rm.to_coreconf()
+
+    ycbor = rm.to_coreconf()
+    if not args.quiet:
         print(binascii.hexlify(ycbor))
 
     with open(output, "wb") as f:
