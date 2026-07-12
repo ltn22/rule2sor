@@ -881,10 +881,17 @@ class RuleManager:
                         entry_index += 1
                         nb_elm += 1
 
-                        if e[T_FID].find("COAP.OPTION")==0:
-                            space_id = self.sid_search_for(name="space-id-coap", space="identity") 
+                        is_coap_option = False
+                        option_id = None
+                        if e[T_FID].find("COAP.OPTION") == 0:
+                            is_coap_option = True
                             option_id = int(re.search(r'\((\d+)\)', e[T_FID]).group(1))
+                        elif e[T_FID] in COAP_OPTION_NUMBERS:
+                            is_coap_option = True
+                            option_id = COAP_OPTION_NUMBERS[e[T_FID]]
 
+                        if is_coap_option:
+                            space_id = self.sid_search_for(name="space-id-coap", space="identity") 
                             entry_cbor += \
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/space-id", space="data") - entry_sid) + \
                                 cbor.dumps(space_id) +\

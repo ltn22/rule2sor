@@ -199,8 +199,8 @@ YANG_ID = {
     T_COAP_OPT_NO_RESP: "fid-coap-option-no-response",
     T_COAP_OPT_OBS: "fid-coap-option-observe",
     T_OSCORE_FLAGS: "fid-coap-option-oscore-flags",
-    T_OSCORE_FLAGS_FLAGS: "fid-coap-option-oscore-flags-flags",
-    T_OSCORE_FLAGS_N: "fid-coap-option-oscore-flags-n",
+    T_OSCORE_FLAGS_FLAGS: "fid-coap-option-oscore-flags",
+    T_OSCORE_FLAGS_N: "fid-coap-option-oscore-flags",
     T_OSCORE_KID: "fid-coap-option-oscore-kid",
     T_OSCORE_KIDCTX: "fid-coap-option-oscore-kidctx",
     T_OSCORE_PIV: "fid-coap-option-oscore-piv",
@@ -256,6 +256,29 @@ YANG_ID = {
 
     T_UNUSED: "fid-unused",
     T_PAYLOAD: "fid-payload",
+}
+
+COAP_OPTION_NUMBERS = {
+    T_COAP_OPT_IF_MATCH: 1,
+    T_COAP_OPT_URI_HOST: 3,
+    T_COAP_OPT_ETAG: 4,
+    T_COAP_OPT_IF_NONE_MATCH: 5,
+    T_COAP_OPT_OBS: 6,
+    T_COAP_OPT_URI_PORT: 7,
+    T_COAP_OPT_LOC_PATH: 8,
+    T_COAP_OPT_URI_PATH: 11,
+    T_COAP_OPT_CONT_FORMAT: 12,
+    T_COAP_OPT_MAX_AGE: 14,
+    T_COAP_OPT_URI_QUERY: 15,
+    T_COAP_OPT_ACCEPT: 17,
+    T_COAP_OPT_LOC_QUERY: 20,
+    T_COAP_OPT_BLOCK2: 23,
+    T_COAP_OPT_BLOCK1: 27,
+    T_COAP_OPT_SIZE2: 28,
+    T_COAP_OPT_PROXY_URI: 35,
+    T_COAP_OPT_PROXY_SCHEME: 39,
+    T_COAP_OPT_SIZE1: 60,
+    T_COAP_OPT_NO_RESP: 258,
 }
 
 import ipaddress
