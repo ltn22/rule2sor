@@ -921,7 +921,7 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                             print(binascii.hexlify(entry_cbor))
                             nb_elm += 2
                         else: # Field ID
-                            field_id = self.sid_search_for(name=YANG_ID[e[T_FID]][1], space="identity")
+                            field_id = self.sid_search_for(name=YANG_ID[e[T_FID]], space="identity")
                             entry_cbor += \
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-id", space="data") - entry_sid) + \
                                 cbor.dumps(field_id) 
@@ -954,7 +954,7 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
                                 entry_cbor += \
                                     cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
                                     struct.pack("!BB", 0xD8, 45) + \
-                                    cbor.dumps(self.sid_search_for(name=YANG_ID[l][1], space="identity")) 
+                                    cbor.dumps(self.sid_search_for(name=YANG_ID[l], space="identity")) 
 
                             #raise ValueError("Field ID not defined")
                         else:
@@ -971,13 +971,13 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/direction-indicator", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_DI]][1], space="identity")) 
+                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_DI]], space="identity")) 
                         print(binascii.hexlify(entry_cbor))
                         nb_elm += 1
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/matching-operator", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_MO]][1], space="identity")) 
+                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_MO]], space="identity")) 
                         print(binascii.hexlify(entry_cbor))
                         nb_elm += 1
 
@@ -991,7 +991,7 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/comp-decomp-action", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_CDA]][1], space="identity")) 
+                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_CDA]], space="identity")) 
                         print(binascii.hexlify(entry_cbor))
                         nb_elm += 1
 
@@ -1031,12 +1031,12 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
 
                     rule_content += \
                         cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/direction", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name=YANG_ID[rule[T_FRAG][T_FRAG_DIRECTION]][1], space="identity")) 
+                        cbor.dumps(self.sid_search_for(name=YANG_ID[rule[T_FRAG][T_FRAG_DIRECTION]], space="identity")) 
                     nb_elm += 1
  
                     rule_content += \
                         cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rcs-algorithm", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name=YANG_ID[rule[T_FRAG][T_FRAG_PROF][T_FRAG_MIC]][1], space="identity")) 
+                        cbor.dumps(self.sid_search_for(name=YANG_ID[rule[T_FRAG][T_FRAG_PROF][T_FRAG_MIC]], space="identity")) 
                     nb_elm += 1
 
                     rule_content += \
@@ -1057,7 +1057,7 @@ Some conversion capabilities may not works. see http://github.com/ltn22/pyang"""
 
                     rule_content += \
                         cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/fragmentation-mode", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name= YANG_ID[rule[T_FRAG][T_FRAG_MODE]][1], space="identity")) 
+                        cbor.dumps(self.sid_search_for(name= YANG_ID[rule[T_FRAG][T_FRAG_MODE]], space="identity")) 
                     nb_elm += 1
                     
                     rule_content = self.cbor_header(0b101_00000, nb_elm) + rule_content
