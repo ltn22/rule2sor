@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rule2sor"
+version = "0.1.0"
+description = "Convert OpenSCHC JSON rule files into CORECONF/CBOR .sor files"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Laurent Toutain", email = "laurent.toutain@gmail.com" }]
+dependencies = ["cbor2"]
+
+[project.urls]
+Homepage = "https://github.com/ltn22/rule2sor"
+
+[project.scripts]
+rule2sor = "rule2sor.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["rule2sor"]

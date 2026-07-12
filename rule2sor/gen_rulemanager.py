@@ -267,7 +267,7 @@ import warnings
 import pprint
 import cbor2 as cbor
 
-from gen_parameters import *
+from .gen_parameters import *
 
 enable_debug_print = False
 

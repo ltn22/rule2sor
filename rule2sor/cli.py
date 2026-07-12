@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-json2sor: convert an OpenSCHC JSON rule file into a .sor file
+rule2sor: convert an OpenSCHC JSON rule file into a .sor file
 (CORECONF/CBOR representation of the Set of Rules).
 
 Usage:
-    python json2sor.py <rule-file.json> [-s <sid-file>] [-o <output.sor>] [-q]
+    rule2sor <rule-file.json> [-s <sid-file>] [-o <output.sor>] [-q]
 
 The rules are validated and completed by RuleManager.Add(), then
 serialized with RuleManager.to_coreconf().
@@ -17,7 +17,7 @@ import io
 import os
 import sys
 
-from gen_rulemanager import RuleManager
+from .gen_rulemanager import RuleManager
 
 DEFAULT_SID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "ietf-schc@2026-05-07.sid")

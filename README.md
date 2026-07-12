@@ -1,8 +1,27 @@
-# json2sor
+# rule2sor
 
 Convert [OpenSCHC](https://github.com/ltn22/openschc) JSON rule files into
 `.sor` files (the Set of Rules serialized in CORECONF/CBOR, following the
 ietf-schc YANG data model).
+
+## Usage with uvx
+
+    uvx --from git+https://github.com/ltn22/rule2sor rule2sor <rule-file.json>
+
+Or after installation (`pip install git+https://github.com/ltn22/rule2sor`):
+
+    rule2sor <rule-file.json> [-s <sid-file>] [-o <output.sor>] [-q]
+
+By default the output file has the same name as the input with the `.sor`
+extension, and the SID file is the bundled `ietf-schc@2026-05-07.sid`.
+With `-q` only the final message is printed.
+
+Example:
+
+    rule2sor atmos41.json
+    # -> atmos41.sor
+
+## What it does
 
 This is an extraction of the minimal code from OpenSCHC:
 
@@ -17,26 +36,7 @@ This is an extraction of the minimal code from OpenSCHC:
   (copied unmodified from OpenSCHC).
 - `ietf-schc@2026-05-07.sid` — default SID file.
 
-## Installation
-
-Requires Python 3 and `cbor2`:
-
-    pip install cbor2
-
-## Usage
-
-    python json2sor.py <rule-file.json> [-s <sid-file>] [-o <output.sor>] [-q]
-
-By default the output file has the same name as the input with the `.sor`
-extension, and the SID file is `ietf-schc@2026-05-07.sid`. With `-q` only the
-final message is printed.
-
-Example:
-
-    python json2sor.py atmos41.json
-    # -> atmos41.sor
-
 ## JSON rule format
 
-See the long docstring at the top of `gen_rulemanager.py`, which documents
-the OpenSCHC JSON rule data model (compression and fragmentation).
+See the long docstring at the top of `rule2sor/gen_rulemanager.py`, which
+documents the OpenSCHC JSON rule data model (compression and fragmentation).
