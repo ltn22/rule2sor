@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "Laurent Toutain", email = "laurent.toutain@gmail.com" }]
-dependencies = ["cbor2"]
+dependencies = ["cbor2", "cbor-diag"]
 
 [project.urls]
 Homepage = "https://github.com/ltn22/rule2sor"

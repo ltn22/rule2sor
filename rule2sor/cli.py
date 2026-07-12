@@ -15,6 +15,8 @@ import binascii
 import os
 import sys
 
+from cbor_diag import cbor2diag
+
 from .gen_rulemanager import RuleManager
 
 DEFAULT_SID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -47,6 +49,7 @@ def main():
     ycbor = rm.to_coreconf()
     if not args.quiet:
         print(binascii.hexlify(ycbor))
+        print(cbor2diag(ycbor))
 
     with open(output, "wb") as f:
         f.write(ycbor)
