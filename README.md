@@ -32,8 +32,8 @@ This is an extraction of the minimal code from OpenSCHC:
   - `Print()`: displays the rules as ASCII tables;
   - `add_sid_file()` / `to_coreconf()`: serializes the Set of Rules in
     CORECONF/CBOR using the SID values.
-- `gen_parameters.py` — constants, `YANG_ID` mapping and `adapt_value()`
-  (copied unmodified from OpenSCHC).
+- `gen_parameters.py` — constants, `YANG_ID` mapping (simplified to a direct
+  name-to-YANG-identifier mapping) and `adapt_value()`.
 - `ietf-schc@2026-05-07.sid` — default SID file.
 
 ## JSON rule format
