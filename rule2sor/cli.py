@@ -12,10 +12,12 @@ serialized with RuleManager.to_coreconf().
 
 import argparse
 import binascii
+import json
 import os
 import sys
 
 from cbor_diag import cbor2diag
+from pycoreconf import CORECONFModel
 
 from .gen_rulemanager import RuleManager
 
@@ -49,7 +51,11 @@ def main():
     ycbor = rm.to_coreconf()
     if not args.quiet:
         print(binascii.hexlify(ycbor))
+        print("\nCBOR diagnostic notation:")
         print(cbor2diag(ycbor))
+        print("\nRESTCONF JSON:")
+        model = CORECONFModel([args.sid])
+        print(json.dumps(model.decode(ycbor, as_rfc7951=True), indent=2))
 
     with open(output, "wb") as f:
         f.write(ycbor)
