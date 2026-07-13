@@ -199,8 +199,6 @@ YANG_ID = {
     T_COAP_OPT_NO_RESP: "fid-coap-option-no-response",
     T_COAP_OPT_OBS: "fid-coap-option-observe",
     T_OSCORE_FLAGS: "fid-coap-option-oscore-flags",
-    T_OSCORE_FLAGS_FLAGS: "fid-coap-option-oscore-flags-flags",
-    T_OSCORE_FLAGS_N: "fid-coap-option-oscore-flags-n",
     T_OSCORE_KID: "fid-coap-option-oscore-kid",
     T_OSCORE_KIDCTX: "fid-coap-option-oscore-kidctx",
     T_OSCORE_PIV: "fid-coap-option-oscore-piv",
