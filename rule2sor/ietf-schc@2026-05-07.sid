@@ -168,6 +168,18 @@
             },
             {
                 "namespace": "identity",
+                "identifier": "fid-coap-option-oscore-flags-flags",
+                "status": "unstable",
+                "sid": 2834
+            },
+            {
+                "namespace": "identity",
+                "identifier": "fid-coap-option-oscore-flags-n",
+                "status": "unstable",
+                "sid": 2835
+            },
+            {
+                "namespace": "identity",
                 "identifier": "fid-coap-option-oscore-kid",
                 "status": "unstable",
                 "sid": 2831
