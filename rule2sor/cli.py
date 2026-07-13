@@ -26,8 +26,8 @@ DEFAULT_SID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert OpenSCHC JSON rules to a CORECONF/CBOR .sor file")
-    parser.add_argument("rule_file", help="JSON file describing the set of rules")
+        description="Convert OpenSCHC JSON rules to a CORECONF/CBOR .sor file, or display a .sor file")
+    parser.add_argument("rule_file", help="JSON file describing the set of rules, or .sor file to display")
     parser.add_argument("-s", "--sid", default=DEFAULT_SID_FILE,
                         help="SID file (default: %(default)s)")
     parser.add_argument("-o", "--output",
@@ -35,6 +35,20 @@ def main():
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="do not print the rules nor the CBOR dump")
     args = parser.parse_args()
+
+    if args.rule_file.endswith(".sor"):
+        if not os.path.exists(args.rule_file):
+            print(f"Error: file not found: {args.rule_file}", file=sys.stderr)
+            sys.exit(1)
+        with open(args.rule_file, "rb") as f:
+            ycbor = f.read()
+        print("CBOR (hex):", binascii.hexlify(ycbor).decode())
+        print("\nCBOR diagnostic notation:")
+        print(cbor2diag(ycbor))
+        print("\nRESTCONF JSON:")
+        model = CORECONFModel([args.sid])
+        print(json.dumps(model.decode(ycbor, as_rfc7951=True), indent=2))
+        return
 
     output = args.output
     if output is None:

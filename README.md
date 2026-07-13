@@ -16,10 +16,19 @@ By default the output file has the same name as the input with the `.sor`
 extension, and the SID file is the bundled `ietf-schc@2026-05-07.sid`.
 With `-q` only the final message is printed.
 
+If you pass a `.sor` file instead of a JSON file, `rule2sor` will read and print
+its contents (CBOR hex, CBOR diagnostic notation, and decoded RESTCONF JSON)
+directly to the standard output:
+
+    rule2sor <file.sor> [-s <sid-file>]
+
 Example:
 
     rule2sor atmos41.json
     # -> atmos41.sor
+
+    rule2sor atmos41.sor
+    # displays the content of atmos41.sor
 
 ## What it does
 
