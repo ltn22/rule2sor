@@ -45,7 +45,7 @@ Both fields are integer numbers::
     # notice that RuleID 12 represented on 6 bits is different from RuleID 12 on 4 bits!
     }
 
-In SCHC, rules are used either for compression or fragmentation. Therefore, one and only one of the two keywords "fragmentation" or "compression" must be specified, per rule.
+In SCHC, rules are used either for compression or fragmentation. Therefore, exactly one of the three keywords "Compression", "Fragmentation" or "NoCompression" must be specified, per rule.
 
 Compression Rules
 -----------------
@@ -55,28 +55,30 @@ The order in which the Field Descriptions appear in the rule is significant (e.g
 
 The Field Description is a dictionary containing the key+data pairs as defined in the SCHC specification:
 
-* **FID**: a string identifying the field of the protocol header that is being compressed. The value of this string is the one returned by the protocol analyzer when encountering said field. E.g. "IPV6.VER". <<< why is this not IP.VER instead? It seems to me that IPV6.VER will always be 6!>>>
+* **FID**: a string identifying the field of the protocol header that is being compressed. The value of this string is the one returned by the protocol analyzer when encountering said field. E.g. "IPV6.VER". FID, MO and CDA values are matched case-insensitively (they are upper-cased internally), but DI values are not and must be given exactly as "UP", "DW" or "BI".
 * **FL**: if the value is a number, that value expresses the length of the field, in bits. If the \
 value is a string, it designates a function that can compute the field length. The functions currently defined are:
 
   * *var*: the field is of variable length. It will be determined at run time by the protocol analyzer. The length (expressed in bytes) will be transmitted as part of the compression residue. The encoding is described in the SCHC specification.
+  * *var_bit*: same as *var*, but the length is expressed in bits instead of bytes.
   * *tkl*: this function is specific for compressing the CoAP Token field. The length of the Token is determined at run time by the protocol analyzer by looking at the Token Length field of he CoAP header.
 
 * **FP**: an integer specifying the position in the header of the field this Field Description applies to. The default value is 1. For each recurrence of the same field in the header, the value is increased by 1.
 * **DI**: tells the direction to which this Field Description applies:
 
-    * *Up*: only to uplink messages (i.e. from device to network)
-    * *Dw*: only to downlink messages (i.e. from network to device)
-    * *Bi*: to both directions
+    * *UP*: only to uplink messages (i.e. from device to network)
+    * *DW*: only to downlink messages (i.e. from network to device)
+    * *BI*: to both directions (default)
 
 * **TV**: specifies the Target Value. The value is a number, a string or an array of these types. The "TV" key can be omitted or its value set to null if there is no value to check, for instance together with the "ignore" MO. If the Target Value is an array, then the value null among the array elements indicates that \
 the Field Descriptor matches the case where the field is not present in the header being compressed.
 * **MO**: specifies the Matching Operator. It is a string that can take the following values:
 
   * *ignore*: the field must be present in the header, but the value is not checked.
-  * *equal*: type and value must check between the field value and the Target Value <<< il y a des champs avec des descriptions explicites de type dans les protocoles considérés ? >>
+  * *equal*: type and value must check between the field value and the Target Value.
   * *MSB*: the most significant bits of the Target Value are checked against the most significant bits of the field value. The number of bits to be checked is given by the "MOa" field.
   * *match-mapping*: with this MO, the Target Value must be an array. This MO matches when one element of the Target Value array matches the field, in type and value.
+  * *rev-rule-match*: the rule is looked up by matching a field against the reverse-direction rule instead of a Target Value.
 
 * **MOa**: specifies, if applicable, an argument to the MO. This currently only applies to the "MSB" MO, where the argument specifies the length of the matching, in bits.
 * **CDA**: designates the Compression/Decompression Action. It is a string that can take the following values:
@@ -85,37 +87,41 @@ the Field Descriptor matches the case where the field is not present in the head
    * *value-sent*: the field value is sent in extenso in the residue.
    * *LSB*: the bits remaining after the MSB comparison are sent in the residue.
    * *mapping-sent*: the index of the matching element in the array is sent.
-   * *compute*: the field is not sent in the residue and the receiver knows how to recover the value from other information. This is generally used for length and checksum.
+   * *compute-length*, *compute-checksum*: the field is not sent in the residue and the receiver recomputes it from the rest of the decompressed header.
+   * *DEVIID*, *APPIID*: the field is rebuilt from the device's IID (e.g. derived from a LoRaWAN DevEUI).
+   * *compute-deviid*: the device's IID is recomputed (LoRaWAN-specific derivation).
+   * *rev-compressed-sent*: the value sent in the residue is taken from the reverse-direction rule.
 
 * **CDAa**: represents the argument of the CDA. Currently, no CDAa is defined.
+* **Action**: experimental, unvalidated keyword carried through as-is if present; do not rely on it yet.
 
 For example::
 
   {
-    "ruleID": 12,
-    "ruleLength": 4,
-    "compression": [
-      {"FID": "IPV6.VER", "FL": 4, "FP": 1, "DI": "Bi", "TV": 6, "MO": "equal", "CDA": "not-sent"},
-      {"FID": "IPV6.TC",  "FL": 8, "FP": 1, "DI": "Bi", "TV": 0, "MO": "equal", "CDA": "not-sent"},
-      {"FID": "IPV6.FL",  "FL": 20,"FP": 1, "DI": "Bi", "TV": 0, "MO": "ignore","CDA": "not-sent"},
-      {"FID": "IPV6.LEN", "FL": 16,"FP": 1, "DI": "Bi",          "MO": "ignore","CDA": "compute-length"},
-      {"FID": "IPV6.NXT", "FL": 8, "FP": 1, "DI": "Bi", "TV": 58, "MO": "equal", "CDA": "not-sent"},
-      {"FID": "IPV6.HOP_LMT","FL": 8,"FP": 1,"DI": "Bi","TV": 255,"MO": "ignore","CDA": "not-sent"},
-      {"FID": "IPV6.DEV_PREFIX","FL": 64,"FP": 1,"DI": "Bi","TV": ["2001:db8::/64",
+    "RuleID": 12,
+    "RuleIDLength": 4,
+    "Compression": [
+      {"FID": "IPV6.VER", "FL": 4, "FP": 1, "DI": "BI", "TV": 6, "MO": "equal", "CDA": "not-sent"},
+      {"FID": "IPV6.TC",  "FL": 8, "FP": 1, "DI": "BI", "TV": 0, "MO": "equal", "CDA": "not-sent"},
+      {"FID": "IPV6.FL",  "FL": 20,"FP": 1, "DI": "BI", "TV": 0, "MO": "ignore","CDA": "not-sent"},
+      {"FID": "IPV6.LEN", "FL": 16,"FP": 1, "DI": "BI",          "MO": "ignore","CDA": "compute-length"},
+      {"FID": "IPV6.NXT", "FL": 8, "FP": 1, "DI": "BI", "TV": 58, "MO": "equal", "CDA": "not-sent"},
+      {"FID": "IPV6.HOP_LMT","FL": 8,"FP": 1,"DI": "BI","TV": 255,"MO": "ignore","CDA": "not-sent"},
+      {"FID": "IPV6.DEV_PREFIX","FL": 64,"FP": 1,"DI": "BI","TV": ["2001:db8::/64",
                                                                    "fe80::/64",
                                                                    "2001:0420:c0dc:1002::/64" ],
                                                                   "MO": "match-mapping","CDA": "mapping-sent","SB": 1},
-      {"FID": "IPV6.DEV_IID","FL": 64,"FP": 1,"DI": "Bi","TV": "::79","MO": "equal","CDA": "DEVIID"},
-      {"FID": "IPV6.APP_PREFIX","FL": 64,"FP": 1,"DI": "Bi","TV": [ "2001:db8:1::/64",
+      {"FID": "IPV6.DEV_IID","FL": 64,"FP": 1,"DI": "BI","TV": "::79","MO": "equal","CDA": "DEVIID"},
+      {"FID": "IPV6.APP_PREFIX","FL": 64,"FP": 1,"DI": "BI","TV": [ "2001:db8:1::/64",
                                                                     "fe80::/64",
                                                                     "2404:6800:4004:818::/64" ],
                                                                   "MO": "match-mapping","CDA": "mapping-sent", "SB": 2},
-      {"FID": "IPV6.APP_IID","FL": 64,"FP": 1,"DI": "Bi","TV": "::2004","MO": "equal","CDA": "not-sent"},
-      {"FID": "ICMPV6.TYPE","FL": 8,"FP": 1,"DI": "Bi","TV": 128,"MO": "equal","CDA": "not-sent"},
-      {"FID": "ICMPV6.CODE","FL": 8,"FP": 1,"DI": "Bi","TV": 0,  "MO": "equal","CDA": "not-sent"},
-      {"FID": "ICMPV6.CKSUM","FL": 16,"FP": 1,"DI": "Bi","TV": 0,"MO": "ignore","CDA": "compute-checksum"},
-      {"FID": "ICMPV6.IDENT","FL": 16,"FP": 1,"DI": "Bi","TV": [],"MO": "ignore","CDA": "value-sent"},
-      {"FID": "ICMPV6.SEQNB","FL": 16,"FP": 1,"DI": "Bi","TV": [],"MO": "ignore","CDA": "value-sent"}
+      {"FID": "IPV6.APP_IID","FL": 64,"FP": 1,"DI": "BI","TV": "::2004","MO": "equal","CDA": "not-sent"},
+      {"FID": "ICMPV6.TYPE","FL": 8,"FP": 1,"DI": "BI","TV": 128,"MO": "equal","CDA": "not-sent"},
+      {"FID": "ICMPV6.CODE","FL": 8,"FP": 1,"DI": "BI","TV": 0,  "MO": "equal","CDA": "not-sent"},
+      {"FID": "ICMPV6.CKSUM","FL": 16,"FP": 1,"DI": "BI","TV": 0,"MO": "ignore","CDA": "compute-checksum"},
+      {"FID": "ICMPV6.IDENT","FL": 16,"FP": 1,"DI": "BI","TV": [],"MO": "ignore","CDA": "value-sent"},
+      {"FID": "ICMPV6.SEQNB","FL": 16,"FP": 1,"DI": "BI","TV": [],"MO": "ignore","CDA": "value-sent"}
     ]
   }
 
@@ -131,29 +137,31 @@ Inside the keyword **FRMode** indicates which Fragmentation mode is used (**NoAc
 **DW** for the opposite direction. This entry is mandatory.
 Then the keyword **FRModeProfiler** gives the information needed to create the SCHC fragmentation header and mode profile:
 
-* **dtagSize** gives in bit the size of the dtag field. <<if not present or set to 0, this field is not present \
-in the SCHC fragmentation header>>. This keyword can be used by all the fragmentation modes.
+* **dtagSize** gives in bit the size of the dtag field. Defaults to 2 in NoAck, 0 otherwise. This keyword \
+can be used by all the fragmentation modes.
 * **WSize** gives in bit the size of Window field. If not present, the default value is 0 (no window) in \
-NoAck and 1 in AckAlways. In ackOnErr this field must be set to 1 or to an higher value.
+NoAck and 1 in AckAlways/AckOnError.
 * **FCNSize** gives in bit the size of the FCN field. If not present, by default, the value is 1 for NoAck.\
 For AckAlways and AckOnError the value must be specified.
-* **ackBehavior** this keyword specifies on AckOnError, when the fragmenter except to receive a bitmap from the reassembler:
+* **windowSize** gives the number of tiles per window. If not present, it defaults to ``2**FCNSize - 1``.
+* **ackBehavior** this keyword specifies on AckOnError, when the fragmenter expects to receive a bitmap from the reassembler:
 
-    * *afterAll1*: the bitmap (or RCS OK) is expected only after the reception of a All-1.
-    * *afterAll0*: the bitmap may be expected after the transmission of the window last fragment (All-0 or All-1)
+    * *afterAll1*: the bitmap (or RCS OK) is expected only after the reception of an All-1 (default).
+    * *afterAll0*: the bitmap may be expected after the transmission of the window's last fragment (All-0 or All-1).
+    * *afterAny*: reserved for future use, not yet enforced by this implementation.
 
-* **lastTileInAll1**: true to append last tile to the All-1 message, false otherwise.
-* **tileSize** gives the size in bit of a tile.
-* **MICAlgorithm** gives the algorithm used to compute the MIB, by default **RCS_RFC8724** (e.g. crc32),
-* **MICWordSize** gives the size of the RCS word.
-* **maxRetry** indicates to the sender how many time a fragment or ack request can be sent.
-* **timeout** indicated in seconds to the sender how many time between two retransmissions. The receiver can compute the delay before aborting.
+* **lastTileInAll1**: mandatory for AckOnError; must currently be ``false`` (``true`` raises ``NotImplementedError``, this case is not implemented yet).
+* **tileSize** gives the size in bit of a tile. Mandatory for AckOnError.
+* **MICAlgorithm** gives the algorithm used to compute the RCS, by default **RCS_CRC32**.
+* **L2WordSize** gives the size in bits of the layer-2 word used to pad the last tile, by default 8.
+* **maxRetry** indicates to the sender how many times a fragment or ack request can be sent. Defaults to 4 (AckAlways/AckOnError only).
+* **timeout** indicated in seconds to the sender how many time between two retransmissions. The receiver can compute the delay before aborting. Defaults to 600 (AckAlways/AckOnError only).
 
 For instance::
 
     {
         "RuleID": 1,
-        "RuleLength": 3,
+        "RuleIDLength": 3,
         "Fragmentation" : {
             "FRMode": "AckOnError",
             "FRDirection": "UP",
@@ -163,8 +171,8 @@ For instance::
                 "FCNSize": 3,
                 "ackBehavior": "afterAll1",
                 "tileSize": 9,
-                "MICAlgorithm": "RCS_RFC8724",
-                "MICWordSize": 8,
+                "MICAlgorithm": "RCS_CRC32",
+                "L2WordSize": 8,
                 "maxRetry": 4,
                 "timeout": 600,
                 "lastTileInAll1": false
@@ -202,12 +210,12 @@ The set of rules itself expands as shown below::
         {
         "RuleID" : 12,
         "RuleIDLength" : 4,
-        "compression": [
+        "Compression": [
             {
             "FID": "IPV6.VER",
             "FL": 4,
             "FP": 1,
-            "DI": "Bi",
+            "DI": "BI",
             "TV": 6,
             "MO": "equal",
             "CDA": "not-sent"
@@ -216,7 +224,7 @@ The set of rules itself expands as shown below::
             "FID": "IPV6.DEV_PREFIX",
             "FL": 64,
             "FP": 1,
-            "DI": "Bi",
+            "DI": "BI",
             "TV": [ "2001:db8::/64", "fe80::/64", "2001:0420:c0dc:1002::/64" ],
             "MO": "match-mapping",
             "CDA": "mapping-sent",
@@ -226,38 +234,25 @@ The set of rules itself expands as shown below::
         {
         "RuleID" : 13,
         "RuleIDLength" : 4,
-        "fragmentation" : ....
+        "Fragmentation" : ....
         },
         .....
     ]
 
+This module (`gen_rulemanager.py`) is a trimmed extraction of OpenSCHC's RuleManager, keeping only
+what is needed to convert a JSON rule file into a `.sor` CORECONF/CBOR file:
 
+* **Add**: as described above, loads and validates a rule or a whole context into memory.
+* **Print**: displays the in-memory context/rules as ASCII tables.
+* **FindNoCompressionRule**: returns the "no compression" rule for a device, if any.
+* **add_sid_file** / **sid_search_for**: load a SID file and resolve a YANG identifier or
+  data-node name to its SID.
+* **to_coreconf**: serializes the context for one device as CORECONF/CBOR, using the SID file
+  loaded with `add_sid_file`, producing the `.sor` file.
 
-Remove
-------
-
-Suppresses a rule for a specific device <<< only one, or a set of rules? >>>. If no rule is specified, all rules for that device are removed from the context::
-
-      RM.remove ({"DeviceID": 0x1234567, "SoR": {{"ruleID":12, "ruleLength":4}}})
-      RM.remove ({"DeviceID": 0x1234567})
-
-FindRuleFromPacket
-------------------
-
-This method returns a rule and a DeviceID that match a packet description given by the protocol analyzer.
-
-FindFragmentationRule (size)
-----------------------------
-
-Returns a fragmentation rule compatible with the packet size passed as parameter.
-
-
-FindRuleFromID
---------------
-
-Given the first bits received from the LPWAN, returns either a fragmentation or a compression rule.
-
-
+The rule-lookup and fragmentation/reassembly logic of the original OpenSCHC RuleManager
+(`Remove`, `FindRuleFromPacket`, `FindFragmentationRule`, `FindRuleFromID`, ...) is out of scope
+for this extraction and is not implemented here.
 """
 
 import json
