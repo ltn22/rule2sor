@@ -53,26 +53,40 @@ Compression Rules
 As defined in the SCHC specification, compression rules are composed of Field Descriptions.
 The order in which the Field Descriptions appear in the rule is significant (e.g. it defines the order in which the compression residues are sent), therefore a compression rule is represented as an array.
 
-The Field Description is a dictionary containing the key+data pairs as defined in the SCHC specification:
+The Field Description is a dictionary containing the key+data pairs as defined in the SCHC specification.
 
-* **FID**: a string identifying the field of the protocol header that is being compressed. The value of this string is the one returned by the protocol analyzer when encountering said field. E.g. "IPV6.VER". FID, MO and CDA values are matched case-insensitively (they are upper-cased internally), but DI values are not and must be given exactly as "UP", "DW" or "BI".
+FID, FL, DI, MO and CDA values can be written with two syntaxes, which can be mixed:
+
+* the YANG syntax: the name of the identity of the ietf-schc data model without its prefix
+  (``fid-``, ``fl-``, ``di-``, ``mo-``, ``cda-``), e.g. "ipv6-version", "length-bytes(16)",
+  "down", "equal", "compute". The identity is looked up in the loaded SID files, so any
+  identity they define can be used without changing the code; the SID files must therefore
+  be loaded (``add_sid_file``) before ``Add``.
+* the old OpenSCHC syntax described below (e.g. "IPV6.VER", "var", "DW", "compute-length"),
+  converted through ``YANG_ID``. Old FID, DI, MO and CDA names are matched case-insensitively.
+
+Both syntaxes give the same .sor file.
+
+* **FID**: a string identifying the field of the protocol header that is being compressed. The value of this string is the one returned by the protocol analyzer when encountering said field. E.g. "ipv6-version" or "IPV6.VER". A universal option is written ``<space>.option(N)`` or ``UO(<space>, N)``, e.g. "coap.option(11)" or "UO(coap, 11)" for Uri-Path: ``<space>`` gives the identity ``space-id-<space>`` and N the universal-value.
 * **FL**: if the value is a number, that value expresses the length of the field, in bits. If the \
-value is a string, it designates a function that can compute the field length. The functions currently defined are:
+value is a string, it designates a function that can compute the field length, optionally with an integer argument, e.g. "length-bytes(16)". With the YANG syntax, the functions are the fl-* identities (variable, variable-bits, token-length, length-bytes, length-bits...). The old names are:
 
   * *var*: the field is of variable length. It will be determined at run time by the protocol analyzer. The length (expressed in bytes) will be transmitted as part of the compression residue. The encoding is described in the SCHC specification.
   * *var_bit*: same as *var*, but the length is expressed in bits instead of bytes.
   * *tkl*: this function is specific for compressing the CoAP Token field. The length of the Token is determined at run time by the protocol analyzer by looking at the Token Length field of he CoAP header.
+  * *length-byte(N)*: length function expressed in bytes, taking the integer argument N (0 to 65535, encoded as field-length-value). This generalizes *tkl* and is preferred, e.g. ``"FL": "length-byte(16)"`` (or "length-bytes(16)") for the CoAP Token.
+  * *length-bit(N)*: same as *length-byte(N)*, but the length is expressed in bits.
 
-* **FP**: an integer specifying the position in the header of the field this Field Description applies to. The default value is 1. For each recurrence of the same field in the header, the value is increased by 1.
+* **FP**: an integer specifying the position in the header of the field this Field Description applies to. The default value is 1. For each recurrence of the same field in the header, the value is increased by 1. This is checked per direction: the n-th entry of a FID applying to UP (resp. DW) must have FP n, so repeated fields must give their FP explicitly.
 * **DI**: tells the direction to which this Field Description applies:
 
-    * *UP*: only to uplink messages (i.e. from device to network)
-    * *DW*: only to downlink messages (i.e. from network to device)
-    * *BI*: to both directions (default)
+    * *up* or *UP*: only to uplink messages (i.e. from device to network)
+    * *down* or *DW*: only to downlink messages (i.e. from network to device)
+    * *bidirectional* or *BI*: to both directions (default)
 
 * **TV**: specifies the Target Value. The value is a number, a string or an array of these types. The "TV" key can be omitted or its value set to null if there is no value to check, for instance together with the "ignore" MO. If the Target Value is an array, then the value null among the array elements indicates that \
 the Field Descriptor matches the case where the field is not present in the header being compressed.
-* **MO**: specifies the Matching Operator. It is a string that can take the following values:
+* **MO**: specifies the Matching Operator. With the YANG syntax, any mo-* identity (e.g. rule-match). The old names are:
 
   * *ignore*: the field must be present in the header, but the value is not checked.
   * *equal*: type and value must check between the field value and the Target Value.
@@ -81,7 +95,7 @@ the Field Descriptor matches the case where the field is not present in the head
   * *rev-rule-match*: the rule is looked up by matching a field against the reverse-direction rule instead of a Target Value.
 
 * **MOa**: specifies, if applicable, an argument to the MO. This currently only applies to the "MSB" MO, where the argument specifies the length of the matching, in bits.
-* **CDA**: designates the Compression/Decompression Action. It is a string that can take the following values:
+* **CDA**: designates the Compression/Decompression Action. With the YANG syntax, any cda-* identity (e.g. compute, compress-sent). The old names are:
 
    * *not-sent*: the field value is not sent as a residue.
    * *value-sent*: the field value is sent in extenso in the residue.
@@ -95,7 +109,21 @@ the Field Descriptor matches the case where the field is not present in the head
 * **CDAa**: represents the argument of the CDA. Currently, no CDAa is defined.
 * **Action**: experimental, unvalidated keyword carried through as-is if present; do not rely on it yet.
 
-For example::
+For example, with the YANG syntax::
+
+  {
+    "RuleIDValue": 3,
+    "RuleIDLength": 5,
+    "Compression": [
+      {"FID": "ipv6-version", "TV": 6, "MO": "equal", "CDA": "not-sent"},
+      {"FID": "ipv6-payload-length", "MO": "ignore", "CDA": "compute"},
+      {"FID": "coap-token", "FL": "length-bytes(16)", "MO": "ignore", "CDA": "value-sent"},
+      {"FID": "coap.option(11)", "DI": "down", "TV": "c", "MO": "equal", "CDA": "not-sent"},
+      {"FID": "UO(coap, 12)", "TV": 110, "MO": "equal", "CDA": "not-sent"}
+    ]
+  }
+
+or with the old syntax::
 
   {
     "RuleID": 12,
@@ -245,8 +273,8 @@ what is needed to convert a JSON rule file into a `.sor` CORECONF/CBOR file:
 * **Add**: as described above, loads and validates a rule or a whole context into memory.
 * **Print**: displays the in-memory context/rules as ASCII tables.
 * **FindNoCompressionRule**: returns the "no compression" rule for a device, if any.
-* **add_sid_file** / **sid_search_for**: load a SID file and resolve a YANG identifier or
-  data-node name to its SID.
+* **add_sid_file** / **sid_search_for**: load a SID file (several can be loaded, before ``Add``)
+  and resolve a YANG identifier or data-node name to its SID.
 * **to_coreconf**: serializes the context for one device as CORECONF/CBOR, using the SID file
   loaded with `add_sid_file`, producing the `.sor` file.
 
@@ -334,6 +362,9 @@ FIELD__DEFAULT_PROPERTY = {
     T_PAYLOAD               : {"FL": "var", "TYPE": bytes, "ALGO": "DIRECT"}
 }
 
+# default field length indexed by YANG identity, for FIDs given with the identity syntax
+FIELD_LENGTH_DEFAULT = {YANG_ID[fid]: prop[T_FL] for fid, prop in FIELD__DEFAULT_PROPERTY.items() if fid in YANG_ID}
+
 class RuleManager:
     """
     # Class RuleManager
@@ -377,7 +408,7 @@ class RuleManager:
             dev_info = json.loads(open(file).read())
 
         if type(dev_info) is dict: #Context or Rules
-            if T_RULEID in dev_info: # Rules
+            if T_RULEID in dev_info or T_RULEIDVALUE in dev_info: # Rules
                 sor = [dev_info]
             elif "SoR" in dev_info:
                 if "DeviceID" in dev_info:
@@ -532,9 +563,99 @@ class RuleManager:
 
         return value_list
 
+    def _identity (self, name, prefix, old_names, what):
+        """
+        Return the YANG identity for a FID/MO/CDA/DI/FL name. Two syntaxes are accepted:
+
+        * the old OpenSCHC name (e.g. IPV6.VER, compute-length, UP, var), converted through YANG_ID;
+        * the identity without its prefix (e.g. ipv6-version, compute, up, variable),
+          looked up directly in the SID files, so that any identity they define can be used.
+        """
+        if name.upper() in old_names: # FID, DI, MO and CDA old names are case-insensitive
+            identity = YANG_ID[name.upper()]
+        elif name in old_names:     # FL old names (var, tkl...)
+            identity = YANG_ID[name]
+        else:
+            identity = prefix + name.lower()
+            if self._identities is None or identity not in self._identities:
+                raise ValueError("unknown {} {}".format(what, name))
+
+        if self._identities is not None and identity not in self._identities:
+            raise ValueError("{} {}: identity {} not found in SID files".format(what, name, identity))
+        return identity
+
+    def _field_id (self, fid):
+        """
+        Resolve a FID into (fid, space-id, universal-value, default FL). For a universal option,
+        given as <space>.option(N) or UO(<space>, N), fid is written UO(<space>, N);
+        otherwise fid is the YANG identity and space-id/universal-value are None.
+        """
+        match = re.fullmatch(r"([A-Za-z0-9_-]+)\.option\((\d+)\)", fid, re.IGNORECASE) or \
+                re.fullmatch(r"UO\(\s*([A-Za-z0-9_-]+)\s*,\s*(\d+)\s*\)", fid, re.IGNORECASE)
+        if match is not None:
+            space = match.group(1).lower()
+            option = int(match.group(2))
+        elif fid.upper() in COAP_OPTION_NUMBERS: # old CoAP option names, e.g. COAP.URI-PATH
+            space = "coap"
+            option = COAP_OPTION_NUMBERS[fid.upper()]
+        else:
+            identity = self._identity(fid, "fid-", [k for k in FIELD__DEFAULT_PROPERTY if k in YANG_ID], "field id")
+            return identity, None, None, FIELD_LENGTH_DEFAULT.get(identity)
+
+        space_id = "space-id-" + space
+        if self._identities is not None and space_id not in self._identities:
+            raise ValueError("unknown space {} in field id {}".format(space, fid))
+        return "UO({}, {})".format(space, option), space_id, option, T_FUNCTION_VAR
+
+    def _field_length (self, fl):
+        """
+        Resolve a FL into (length, argument): an integer is kept as is, a function
+        (old name or identity without fl-, optionally with an integer argument such as
+        length-byte(16) or length-bytes(16)) gives its YANG identity and its argument.
+        """
+        if type(fl) is int:
+            return fl, None
+        if type(fl) is not str:
+            raise ValueError("invalid field length {}".format(fl))
+
+        match = re.fullmatch(r"([A-Za-z0-9_-]+)(?:\((\d+)\))?", fl)
+        if match is None:
+            raise ValueError("unknown field length function {}".format(fl))
+
+        identity = self._identity(match.group(1), "fl-",
+                                  [T_FUNCTION_VAR, T_FUNCTION_VARBIT, T_FUNCTION_TKL,
+                                   T_FUNCTION_LENGTH_BYTE, T_FUNCTION_LENGTH_BIT], "field length function")
+        if match.group(2) is None:
+            return identity, None
+
+        arg = int(match.group(2))
+        if arg > 0xFFFF: # field-length-value is a uint16
+            raise ValueError("field length argument too large in {}".format(fl))
+        return identity, arg
+
+    def _check_field_positions (self, arule):
+        """
+        For each direction, the n-th occurrence of a FID in the rule must have FP n:
+        a field repeated in the header (e.g. the IPv6 header quoted inside an ICMPv6
+        error) must carry an explicit FP, since FP defaults to 1.
+        """
+        for direction in [YANG_ID[T_DIR_UP], YANG_ID[T_DIR_DW]]:
+            occurrences = {}
+            for entry in arule[T_COMP]:
+                if not entry[T_DI] in [direction, YANG_ID[T_DIR_BI]]:
+                    continue
+                FID = entry[T_FID]
+                occurrences[FID] = occurrences.get(FID, 0) + 1
+                if type(entry[T_FP]) is not int or entry[T_FP] != occurrences[FID]:
+                    raise ValueError("{} in rule {}/{}: occurrence {} in direction {} must have FP {}, found {}".format(
+                        FID, arule[T_RULEID], arule[T_RULEIDLENGTH],
+                        occurrences[FID], self._short_name(direction, "di-"), occurrences[FID], entry[T_FP]
+                    ))
+
     def _create_compression_rule (self, nrule, device_id = None):
         """
-        parse a rule to verify values and fill defaults
+        parse a rule to verify values and fill defaults. FID, FL, DI, MO and CDA are
+        stored as YANG identities (see _identity).
         """
         arule = {}
         if T_RULEID in nrule: # transition for RuleID to RuleIDValue
@@ -563,28 +684,40 @@ class RuleManager:
                 warnings.warn("Note: T_COAP_OPT_END is ignored")
                 continue
 
-
-            if not'COAP.option' in r["FID"] and not r["FID"].upper() in FIELD__DEFAULT_PROPERTY  :
-                raise ValueError( "Unkwown field id {} in rule {}/{}".format(
-                    r["FID"], arule[T_RULEID],  arule[T_RULEIDLENGTH]
-                ))
-            
             entry = {}
-            FID = r[T_FID].upper()
-            entry[T_FID] = FID
-            if 'COAP.OPTION' not in FID:
-                entry[T_FL] = self._return_default(r, T_FL, FIELD__DEFAULT_PROPERTY[FID][T_FL])
-            else:
-                entry[T_FL] = self._return_default(r, T_FL, "var")
+            try:
+                FID, space_id, universal_value, default_fl = self._field_id(r[T_FID])
+                entry[T_FID] = FID
+                if space_id is not None:
+                    entry[T_SPACE_ID] = space_id
+                    entry[T_UNIVERSAL_VALUE] = universal_value
 
-            entry[T_FP] = self._return_default(r, T_FP, 1)
-            entry[T_DI] = self._return_default(r, T_DI, T_DIR_BI)
-            if entry[T_DI] in [T_DIR_BI, T_DIR_UP]: up_rules += 1
-            if entry[T_DI] in [T_DIR_BI, T_DIR_DW]: dw_rules += 1
+                if not T_FL in r and default_fl is None:
+                    raise ValueError("no default length, FL must be given")
+                entry[T_FL], fl_arg = self._field_length(self._return_default(r, T_FL, default_fl))
+                if fl_arg is not None:
+                    entry[T_FL_VAL] = fl_arg
 
-            MO = r[T_MO].upper()
-            if MO in [T_MO_EQUAL, T_MO_MSB, T_MO_IGNORE, T_MO_MATCH_REV_RULE]:
-                if MO == T_MO_MSB:
+                entry[T_FP] = self._return_default(r, T_FP, 1)
+                entry[T_DI] = self._identity(self._return_default(r, T_DI, T_DIR_BI), "di-",
+                                             [T_DIR_UP, T_DIR_DW, T_DIR_BI], "direction")
+                entry[T_MO] = self._identity(r[T_MO], "mo-",
+                                             [T_MO_EQUAL, T_MO_IGNORE, T_MO_MSB, T_MO_MMAP, T_MO_MATCH_REV_RULE],
+                                             "matching operator")
+                entry[T_CDA] = self._identity(r[T_CDA], "cda-",
+                                              [T_CDA_NOT_SENT, T_CDA_VAL_SENT, T_CDA_MAP_SENT, T_CDA_LSB, T_CDA_COMP_LEN,
+                                               T_CDA_COMP_CKSUM, T_CDA_DEVIID, T_CDA_APPIID, T_CDA_REV_COMPRESS],
+                                              "CDA")
+            except ValueError as err:
+                raise ValueError("{} in rule {}/{}: {}".format(
+                    r[T_FID], arule[T_RULEID], arule[T_RULEIDLENGTH], err)) from None
+
+            if entry[T_DI] in [YANG_ID[T_DIR_BI], YANG_ID[T_DIR_UP]]: up_rules += 1
+            if entry[T_DI] in [YANG_ID[T_DIR_BI], YANG_ID[T_DIR_DW]]: dw_rules += 1
+
+            MO = entry[T_MO]
+            if MO != YANG_ID[T_MO_MMAP]:
+                if MO == YANG_ID[T_MO_MSB]:
                     if T_MO_VAL in r:
                         entry[T_MO_VAL] = r[T_MO_VAL]
                     else:
@@ -609,22 +742,14 @@ class RuleManager:
                 else:
                     entry[T_TV] = None
 
-            elif MO == T_MO_MMAP:
+            else:
                 entry[T_TV] = []
                 for e in r[T_TV]:
                     entry[T_TV].append(adapt_value(e, entry[T_FL], FID))
 
-            else:
-                raise ValueError("{} MO unknown".format(MO))
-            entry[T_MO] = MO
-
-            CDA = r[T_CDA].upper()
-            if not CDA in [T_CDA_NOT_SENT, T_CDA_VAL_SENT, T_CDA_MAP_SENT, T_CDA_LSB, T_CDA_COMP_LEN, 
-                           T_CDA_COMP_CKSUM, T_CDA_DEVIID, T_CDA_APPIID, T_CDA_REV_COMPRESS]:
-                raise ValueError("{} CDA not found".format(CDA))
-            entry[T_CDA] = CDA
-
             arule[T_COMP].append(entry)
+
+        self._check_field_positions(arule)
 
         if not T_META in arule:
             arule[T_META] = {}
@@ -641,6 +766,7 @@ class RuleManager:
         self._log = log
         self._db = []
         self._sid_info = []
+        self._identities = None # names of the identities in the SID files, None if no SID file loaded
 
     def _smart_print(self, v):
         if type(v) is str:
@@ -659,6 +785,12 @@ class RuleManager:
             else: txt += "1"
         return txt
 
+    def _short_name(self, v, prefix):
+        """identity without its prefix, for display"""
+        if type(v) is str and v.startswith(prefix):
+            return v[len(prefix):]
+        return v
+
     def Print (self):
         """
         Print a context
@@ -673,20 +805,22 @@ class RuleManager:
                 print ("|Rule {:8}  {:10}|".format(txt, self.printBin(rule[T_RULEID], rule[T_RULEIDLENGTH])))
 
                 if T_COMP in rule:
-                    print ("|" + "-"*15 + "+" + "-"*3 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"\\")
+                    print ("|" + "-"*22 + "+" + "-"*16 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"\\")
                     for e in rule[T_COMP]:
+                        # identities are displayed without their prefix
+                        fid = self._short_name(e[T_FID], "fid-")
+                        fl = self._short_name(e[T_FL], "fl-")
+                        if T_FL_VAL in e:
+                            fl = "{}({})".format(fl, e[T_FL_VAL])
+                        di = {YANG_ID[T_DIR_UP]: T_DIR_UP, YANG_ID[T_DIR_DW]: T_DIR_DW, YANG_ID[T_DIR_BI]: T_DIR_BI}.get(e[T_DI], e[T_DI])
+
                         msg2 = None
-                        if len(e[T_FID]) < 16:
-                            print ("|{:<15s}|{:>3}|{:2}|{:2}|".format(e[T_FID], e[T_FL], e[T_FP], e[T_DI]), end='')
-                        else:
-                            msg = e[T_FID]
-                            if "-" in msg:
-                                msg1, msg2 = msg.split('-')
-                                msg1 += '-'
-                            else:
-                                msg1 = msg[:15]
-                                msg2 = msg[15:]
-                            print ("|{:<15s}|{:>3}|{:2}|{:2}|".format(msg1, e[T_FL], e[T_FP], e[T_DI]), end="")
+                        if len(fid) < 23:
+                            print ("|{:<22s}|{:>16}|{:2}|{:2}|".format(fid, fl, e[T_FP], di), end='')
+                        else: # FID is too large, write it on 2 lines
+                            msg1 = fid[:22]
+                            msg2 = fid[22:]
+                            print ("|{:<22s}|{:>16}|{:2}|{:2}|".format(msg1, fl, e[T_FP], di), end="")
 
                         if 'TV' in e:
                             if type(e[T_TV]) is list:
@@ -698,22 +832,22 @@ class RuleManager:
                         if not T_TV in e or e[T_TV] == None:
                             print ("-"*30, end="")
 
-                        txt = e[T_MO]
+                        txt = self._short_name(e[T_MO], "mo-")
                         if T_MO_VAL in e:
                             txt = txt+ '(' + str(e[T_MO_VAL])+')'
 
-                        print ("|{:13}|{:16}|".format(txt, e[T_CDA]))
+                        print ("|{:13}|{:16}|".format(txt, self._short_name(e[T_CDA], "cda-")))
 
                         if (T_TV in e) and (type (e[T_TV]) is list):
                             for i in range (1, len(e[T_TV])):
-                                print (":{:^15s}:{:^3}:{:^2}:{:^2}:".format(".", ".", ".","."), end='')
+                                print (":{:^22s}:{:^16}:{:^2}:{:^2}:".format(".", ".", ".","."), end='')
                                 self._smart_print(e[T_TV][i])
                                 print (":{:^13}:{:^16}:".format(".", "."))
 
                         if msg2 != None: # FID is too large, wrote it on 2 lignes, this is the second line
-                            print ("|{:<15s}|{:>3}|{:2}|{:2}|{:30}|{:13}|{:16}|".format(msg2, "", "", "", "", "", "" ), )
+                            print ("|{:<22s}|{:>16}|{:2}|{:2}|{:30}|{:13}|{:16}|".format(msg2, "", "", "", "", "", "" ), )
 
-                    print ("\\" + "-"*15 + "+" + "-"*3 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"/")
+                    print ("\\" + "-"*22 + "+" + "-"*16 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"/")
                 elif T_FRAG in rule:
                     # print (rule)
                     if rule[T_FRAG][T_FRAG_DIRECTION] == T_DIR_UP:
@@ -794,6 +928,10 @@ class RuleManager:
         else:
             raise ValueError("Not a valid SID file")
 
+        if self._identities is None:
+            self._identities = set()
+        self._identities.update(e["identifier"] for e in self._sid_info[-1] if e["namespace"] == "identity")
+
 
     def sid_search_for(self, name, space="data"):
 
@@ -806,10 +944,16 @@ class RuleManager:
         return None 
 
     def cbor_header (self, major, value):
-        if value < 23:
+        if value < 24:
             return struct.pack ('!B', (major | value))
-        elif value < 255:
+        elif value < 0x100:
             return struct.pack ('!BB', (major | 24),  value)
+        elif value < 0x10000:
+            return struct.pack ('!BH', (major | 25),  value)
+        elif value < 0x100000000:
+            return struct.pack ('!BI', (major | 26),  value)
+        else:
+            return struct.pack ('!BQ', (major | 27),  value)
 
     def to_coreconf (self, deviceID="None"):
         """
@@ -822,16 +966,24 @@ class RuleManager:
                 val = [val]
 
             tv_array = b''
+            nb_value = 0
             for i in range(len(val)):
 
-                if type(val[i]) == int:
+                if val[i] is None: # field not present: no value at this index
+                    continue
+                elif type(val[i]) == int:
                     x = val[i]
                     r = b''
                     while x != 0:
                         r = struct.pack('!B', x&0xFF) + r
                         x >>= 8
+                    if r == b'': # value 0 is stored on 1 byte, as in adapt_value
+                        r = b'\x00'
                 elif type(val[i]) == bytes:
                     r = val[i]
+                else:
+                    raise ValueError("{}: unsupported value type {}".format(ref_id, type(val[i])))
+                nb_value += 1
 
                 tv_array += b'\xA2' + \
                     cbor.dumps(self.sid_search_for(name=ref_id+"/index", space="data") - self.sid_search_for(name=ref_id, space="data")) + \
@@ -842,7 +994,7 @@ class RuleManager:
                     cbor.dumps(r)
 
 
-            tv_array = self.cbor_header(0b100_00000, len(val)) + tv_array
+            tv_array = self.cbor_header(0b100_00000, nb_value) + tv_array
             return tv_array
  
         module_sid = self.sid_search_for(name="/ietf-schc:schc", space="data")
@@ -876,25 +1028,16 @@ class RuleManager:
                         entry_index += 1
                         nb_elm += 1
 
-                        is_coap_option = False
-                        option_id = None
-                        if e[T_FID].find("COAP.OPTION") == 0:
-                            is_coap_option = True
-                            option_id = int(re.search(r'\((\d+)\)', e[T_FID]).group(1))
-                        elif e[T_FID] in COAP_OPTION_NUMBERS:
-                            is_coap_option = True
-                            option_id = COAP_OPTION_NUMBERS[e[T_FID]]
-
-                        if is_coap_option:
-                            space_id = self.sid_search_for(name="space-id-coap", space="identity") 
+                        if T_SPACE_ID in e: # universal option
+                            space_id = self.sid_search_for(name=e[T_SPACE_ID], space="identity") 
                             entry_cbor += \
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/space-id", space="data") - entry_sid) + \
                                 cbor.dumps(space_id) +\
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/universal-value", space="data") - entry_sid) + \
-                                cbor.dumps(option_id)
+                                cbor.dumps(e[T_UNIVERSAL_VALUE])
                             nb_elm += 2
                         else: # Field ID
-                            field_id = self.sid_search_for(name=YANG_ID[e[T_FID]], space="identity")
+                            field_id = self.sid_search_for(name=e[T_FID], space="identity")
                             entry_cbor += \
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-id", space="data") - entry_sid) + \
                                 cbor.dumps(field_id) 
@@ -906,28 +1049,17 @@ class RuleManager:
                             entry_cbor += \
                                 cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
                                 cbor.dumps(l)
-                        elif type(l) == str:
-                            if l.find("length-byte") == 0:
+                        elif type(l) == str: # function, as a YANG identity
+                            entry_cbor += \
+                                cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
+                                struct.pack("!BB", 0xD8, 45) + \
+                                cbor.dumps(self.sid_search_for(name=l, space="identity")) 
 
-                                entry_cbor += \
-                                    cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
-                                    struct.pack("!BB", 0xD8, 45) + \
-                                    cbor.dumps(self.sid_search_for(name="fl-length-bytes", space="identity")) 
-
-                                # add option
-                                match = re.search(r"\((\d+)\)", l)
+                            if T_FL_VAL in e: # function argument, e.g. length-bytes(16)
                                 entry_cbor += \
                                     cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length-value", space="data") - entry_sid) + \
-                                    cbor.dumps(int(match.group(1))) 
+                                    cbor.dumps(e[T_FL_VAL]) 
                                 nb_elm += 1
-
-                            else: # var and tkl
-                                entry_cbor += \
-                                    cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
-                                    struct.pack("!BB", 0xD8, 45) + \
-                                    cbor.dumps(self.sid_search_for(name=YANG_ID[l], space="identity")) 
-
-                            #raise ValueError("Field ID not defined")
                         else:
                             raise ValueError("unknown field length value")
                         
@@ -940,12 +1072,12 @@ class RuleManager:
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/direction-indicator", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_DI]], space="identity")) 
+                            cbor.dumps(self.sid_search_for(name=e[T_DI], space="identity")) 
                         nb_elm += 1
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/matching-operator", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_MO]], space="identity")) 
+                            cbor.dumps(self.sid_search_for(name=e[T_MO], space="identity")) 
                         nb_elm += 1
 
                         if T_MO_VAL in e:
@@ -957,7 +1089,7 @@ class RuleManager:
 
                         entry_cbor += \
                             cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/comp-decomp-action", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_CDA]], space="identity")) 
+                            cbor.dumps(self.sid_search_for(name=e[T_CDA], space="identity")) 
                         nb_elm += 1
 
                         if T_TV in e and e[T_TV] != None:

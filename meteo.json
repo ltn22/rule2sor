@@ -1,0 +1,177 @@
+{
+    "DeviceID" : "udp:10.0.0.20:8888",
+    "SoR" : [{
+        "RuleIDValue" : 0,
+        "RuleIDLength": 5,
+        "Description": "Used to fetch a single value (bidirect)",
+        "Compression": [
+            {"FID": "ipv6-version", "TV": 6, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-trafficclass",  "TV": 0, "MO": "ignore", "CDA": "not-sent"},
+            {"FID": "ipv6-flowlabel",  "TV": 0, "MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-payload-length",          "MO": "ignore","CDA": "compute"},
+            {"FID": "ipv6-nextheader", "TV": 17, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-hoplimit", "TV" : 255,"MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-devprefix","TV": "dddd::/64",
+                                                   "MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-deviid", "TV": "::6/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appprefix","TV": "aaaa::/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appiid", "TV": "::2/64","MO": "equal","CDA": "not-sent"},
+
+            {"FID": "udp-dev-port",  "TV": 5683,"MO": "equal",  "CDA": "not-sent"},
+            {"FID": "udp-app-port",             "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "udp-length",       "TV": 0,   "MO": "ignore", "CDA": "compute"},
+            {"FID": "udp-checksum",     "TV": 0,   "MO": "ignore", "CDA": "compute"},
+
+            {"FID": "coap-version",  "DI": "bidirectional", "TV": 1,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-type", "DI": "bidirectional", "TV": 1,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-tkl",  "DI": "bidirectional", "TV": 0,   "MO": "ignore","CDA": "value-sent"},
+            {"FID": "coap-code", "DI": "bidirectional", "TV": [5, 69],   "MO": "match-mapping","CDA": "mapping-sent"},
+            {"FID": "coap-mid",  "DI": "bidirectional", "TV": 0,   "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "coap-token", "FL": "length-bytes(16)",     "MO": "ignore","CDA": "value-sent"},
+
+            {"FID": "coap.option(11)", "FP": 1, "DI": "down", "TV": "c",
+                                "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap.option(12)", "DI": "bidirectional", "TV": 140, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "coap.option(17)", "DI": "down", "TV":  140, "MO": "equal", "CDA": "not-sent"}
+
+        ]},         {
+        "RuleIDValue" : 1,
+        "RuleIDLength": 5,
+        "Description": "Used to iPatch, ack with 7/3. Empty CoAP for notification in UP",
+        "Compression": [
+            {"FID": "ipv6-version", "TV": 6, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-trafficclass",  "TV": 0, "MO": "ignore", "CDA": "not-sent"},
+            {"FID": "ipv6-flowlabel",  "TV": 0, "MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-payload-length",          "MO": "ignore","CDA": "compute"},
+            {"FID": "ipv6-nextheader", "TV": 17, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-hoplimit", "TV" : 255,"MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-devprefix","TV": "dddd::/64",
+                                                   "MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-deviid", "TV": "::6/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appprefix","TV": "aaaa::/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appiid", "TV": "::2/64","MO": "equal","CDA": "not-sent"},
+
+            {"FID": "udp-dev-port",  "TV": 5683,"MO": "equal",  "CDA": "not-sent"},
+            {"FID": "udp-app-port",             "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "udp-length",       "TV": 0,   "MO": "ignore", "CDA": "compute"},
+            {"FID": "udp-checksum",     "TV": 0,   "MO": "ignore", "CDA": "compute"},
+
+            {"FID": "coap-version",  "DI": "bidirectional", "TV": 1,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-type", "DI": "bidirectional", "TV": 1,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-tkl",  "DI": "bidirectional", "TV": 0,   "MO": "ignore","CDA": "value-sent"},
+            {"FID": "coap-code", "DI": "down", "TV": 7,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-code", "DI": "up",              "MO": "ignore","CDA": "value-sent"},
+            {"FID": "coap-mid",  "DI": "bidirectional", "TV": 0,   "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "coap-token", "FL": "length-bytes(16)",     "MO": "ignore","CDA": "value-sent"},
+
+            {"FID": "coap.option(11)", "FP": 1, "DI": "down", "TV": "c",
+                                "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap.option(12)", "DI": "down", "TV": 140, "MO": "equal", "CDA": "not-sent"}
+        ]},          {
+        "RuleIDValue" : 2,
+        "RuleIDLength": 5,
+        "Description": "Used for notitifications (observe)",
+        "Compression": [
+            {"FID": "ipv6-version", "TV": 6, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-trafficclass",  "TV": 0, "MO": "ignore", "CDA": "not-sent"},
+            {"FID": "ipv6-flowlabel",  "TV": 0, "MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-payload-length",          "MO": "ignore","CDA": "compute"},
+            {"FID": "ipv6-nextheader", "TV": 17, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-hoplimit", "TV" : 255,"MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-devprefix","TV": "dddd::/64",
+                                                   "MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-deviid", "TV": "::6/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appprefix","TV": "aaaa::/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appiid", "TV": "::2/64","MO": "equal","CDA": "not-sent"},
+
+            {"FID": "udp-dev-port",  "TV": 5683,"MO": "equal",  "CDA": "not-sent"},
+            {"FID": "udp-app-port",             "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "udp-length",       "TV": 0,   "MO": "ignore", "CDA": "compute"},
+            {"FID": "udp-checksum",     "TV": 0,   "MO": "ignore", "CDA": "compute"},
+
+            {"FID": "coap-version",  "DI": "bidirectional", "TV": 1,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-type", "DI": "bidirectional", "TV": [0,1],   "MO": "match-mapping","CDA": "mapping-sent"},
+            {"FID": "coap-tkl",  "DI": "bidirectional", "TV": 0,   "MO": "ignore","CDA": "value-sent"},
+            {"FID": "coap-code", "DI": "down", "TV": 5,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-code", "DI": "up", "TV": 69,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-mid",  "DI": "bidirectional", "TV": 0,   "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "coap-token", "FL": "length-bytes(16)",     "MO": "ignore","CDA": "value-sent"},
+
+            {"FID": "coap.option(6)", "FL": "variable", "FP": 1, "DI": "bidirectional",     "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "coap.option(11)", "FP": 1, "DI": "down", "TV": "s",    "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap.option(12)", "DI": "bidirectional", "TV": 140, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "coap.option(17)", "DI": "down", "TV": 140, "MO": "equal", "CDA": "not-sent"}
+        ]},         {
+        "RuleIDValue" : 3,
+        "RuleIDLength": 5,
+        "Description": "Empty messages (e.g., ACK with empty code, or RST)",
+        "Compression": [
+            {"FID": "ipv6-version", "TV": 6, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-trafficclass",  "TV": 0, "MO": "ignore", "CDA": "not-sent"},
+            {"FID": "ipv6-flowlabel",  "TV": 0, "MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-payload-length",          "MO": "ignore","CDA": "compute"},
+            {"FID": "ipv6-nextheader", "TV": 17, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-hoplimit", "TV" : 255,"MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-devprefix","TV": "dddd::/64",
+                                                   "MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-deviid", "TV": "::6/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appprefix","TV": "aaaa::/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appiid", "TV": "::2/64","MO": "equal","CDA": "not-sent"},
+
+            {"FID": "udp-dev-port",  "TV": 5683,"MO": "equal",  "CDA": "not-sent"},
+            {"FID": "udp-app-port",             "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "udp-length",       "TV": 0,   "MO": "ignore", "CDA": "compute"},
+            {"FID": "udp-checksum",     "TV": 0,   "MO": "ignore", "CDA": "compute"},
+
+            {"FID": "coap-version",  "DI": "bidirectional", "TV": 1,   "MO": "equal","CDA": "not-sent"},
+            {"FID": "coap-type", "DI": "bidirectional",            "MO": "ignore","CDA": "value-sent"},
+            {"FID": "coap-tkl",  "DI": "bidirectional",            "MO": "ignore","CDA": "value-sent"},
+            {"FID": "coap-code", "DI": "bidirectional",            "MO": "ignore","CDA": "value-sent"},
+            {"FID": "coap-mid",  "DI": "bidirectional",            "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "coap-token", "FL": "length-bytes(16)",     "MO": "ignore","CDA": "value-sent"}
+        ]},   {
+        "RuleIDValue" : 4,
+        "RuleIDLength": 5,
+        "Description": "ICMPv6 destination unreachable (any code)",
+        "Compression": [
+            {"FID": "ipv6-version", "TV": 6, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-trafficclass",  "TV": 0, "MO": "ignore", "CDA": "not-sent"},
+            {"FID": "ipv6-flowlabel",  "TV": 0, "MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-payload-length",          "MO": "ignore","CDA": "compute"},
+            {"FID": "ipv6-nextheader", "TV": 58, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-hoplimit", "TV" : 255,"MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-devprefix","TV": "dddd::/64",
+                                                   "MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-deviid", "TV": "::6/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appprefix","TV": "aaaa::/64","MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appiid", "TV": "::2/64","MO": "equal","CDA": "not-sent"},
+
+            {"FID": "icmpv6-type", "TV": 1, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "icmpv6-code",             "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "icmpv6-checksum",   "TV": 0,   "MO": "ignore", "CDA": "compute"},
+            {"FID": "unused", "FL": 32, "MO": "ignore", "CDA": "not-sent"},
+
+ 
+            {"FID": "ipv6-version", "FP": 2, "TV": 6, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-trafficclass", "FP": 2,  "TV": 0, "MO": "ignore", "CDA": "not-sent"},
+            {"FID": "ipv6-flowlabel", "FP": 2,  "TV": 0, "MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-payload-length", "FP": 2,          "MO": "ignore","CDA": "compute"},
+            {"FID": "ipv6-nextheader", "FP": 2, "TV": 17, "MO": "equal", "CDA": "not-sent"},
+            {"FID": "ipv6-hoplimit", "FP": 2, "TV" : 255,"MO": "ignore","CDA": "not-sent"},
+            {"FID": "ipv6-devprefix", "FP": 2,"TV": "dddd::/64",
+                                                   "MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-deviid", "FP": 2, "TV": "::6/64","MO": "equal","CDA": "not-sent"}, 
+            {"FID": "ipv6-appprefix", "FP": 2,"TV": "aaaa::/64",
+                                                   "MO": "equal","CDA": "not-sent"},
+            {"FID": "ipv6-appiid", "FP": 2, "TV": "::2/64","MO": "equal","CDA": "not-sent"},
+
+            {"FID": "udp-dev-port",  "TV": 5683,"MO": "equal",  "CDA": "not-sent"},
+            {"FID": "udp-app-port",             "MO": "ignore", "CDA": "value-sent"},
+            {"FID": "udp-length",       "TV": 0,   "MO": "ignore", "CDA": "compute"},
+            {"FID": "udp-checksum",     "TV": 0,   "MO": "ignore", "CDA": "compute"},
+
+            {"FID": "payload",             "MO": "ignore","CDA": "not-sent"}
+
+        ]} 
+    ]
+}

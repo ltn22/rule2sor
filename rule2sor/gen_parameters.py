@@ -11,6 +11,9 @@ T_TV = "TV"
 T_TV_IND = "TV.IND"
 T_MO = "MO"
 T_MO_VAL = "MO.VAL"
+T_FL_VAL = "FL.VAL"                 # argument of a field length function, e.g. length-bytes(16)
+T_SPACE_ID = "SPACE-ID"             # FID given as a universal option: space-id identity...
+T_UNIVERSAL_VALUE = "UNIVERSAL-VALUE" # ... and option number
 T_CDA = "CDA"
 T_SB = "SB"
 
@@ -98,6 +101,8 @@ T_FUNCTION_TKL = "tkl"
 T_FUNCTION_VAR = "var"
 T_FUNCTION_VARBIT = "var_bit"
 T_FUNCTION_TKL = "tkl"
+T_FUNCTION_LENGTH_BYTE = "length-byte" # with an argument: length-byte(N)
+T_FUNCTION_LENGTH_BIT = "length-bit"   # with an argument: length-bit(N)
 
 
 T_DIR_UP = "UP"
@@ -213,7 +218,9 @@ YANG_ID = {
     T_UDP_LEN: "fid-udp-length",
     T_FUNCTION_TKL: "fl-token-length",
     T_FUNCTION_VAR: "fl-variable",
-    T_FUNCTION_VARBIT: "fl-variable-bit",
+    T_FUNCTION_VARBIT: "fl-variable-bits",
+    T_FUNCTION_LENGTH_BYTE: "fl-length-bytes",
+    T_FUNCTION_LENGTH_BIT: "fl-length-bits",
     T_FRAG_ACK_ALWAYS: "fragmentation-mode-ack-always",
     T_FRAG_ACK_ON_ERROR: "fragmentation-mode-ack-on-error",
     T_FRAG_NO_ACK: "fragmentation-mode-no-ack",
@@ -221,6 +228,8 @@ YANG_ID = {
     T_MO_IGNORE: "mo-ignore",
     T_MO_MMAP: "mo-match-mapping",
     T_MO_MSB: "mo-msb",
+    T_MO_MATCH_REV_RULE: "mo-rev-rule-match",
+    T_CDA_REV_COMPRESS: "cda-rev-compress-sent",
     T_FRAG_RFC8724: "rcs-crc32",
     # from OAM 
     T_ICMPV6_CODE: "fid-icmpv6-code",
@@ -263,20 +272,24 @@ COAP_OPTION_NUMBERS = {
 
 import ipaddress
 
+# FIDs (as YANG identities) whose string values are IPv6 addresses
+IPV6_ADDRESS_FIDS = [YANG_ID[T_IPV6_APP_IID], YANG_ID[T_IPV6_APP_PREFIX],
+                     YANG_ID[T_IPV6_DEV_IID], YANG_ID[T_IPV6_DEV_PREFIX]]
+
 def adapt_value(value, length=None, FID=None): 
     """transform any value of any type in the smallest bytearray.
-    FID allows to convert properly the string to IPv6 address."""
+    FID (a YANG identity, e.g. fid-ipv6-devprefix) allows to convert properly the string to IPv6 address."""
 
     if type(value) is list:
         result = []
         for e in value:
             result.append(adapt_value(e, length, FID))
 
-        return value
+        return result
     
     if type(value) is int:
 
-        if FID in [T_IPV6_APP_IID, T_IPV6_APP_PREFIX, T_IPV6_DEV_IID, T_IPV6_DEV_PREFIX] and length != None:
+        if FID in IPV6_ADDRESS_FIDS and length != None:
             return value.to_bytes(length//8, byteorder='big')
         
         size = 0
@@ -290,7 +303,7 @@ def adapt_value(value, length=None, FID=None):
 
         return value.to_bytes (size, byteorder='big')
     if type(value) is str:
-        if FID in [T_IPV6_APP_IID, T_IPV6_APP_PREFIX, T_IPV6_DEV_IID, T_IPV6_DEV_PREFIX]:
+        if FID in IPV6_ADDRESS_FIDS:
             # string has to be converted as IPv6 addresses
 
             slash_pos = value.find("/") 
@@ -302,9 +315,9 @@ def adapt_value(value, length=None, FID=None):
             if addr.version != 6: # expect an IPv6 address
                 raise ValueError ("only IPv6 is supported, can not support {}".format(addr.version))
 
-            if FID in [T_IPV6_DEV_PREFIX, T_IPV6_APP_PREFIX]: #prefix top 8
+            if FID in [YANG_ID[T_IPV6_DEV_PREFIX], YANG_ID[T_IPV6_APP_PREFIX]]: #prefix top 8
                 return addr.packed[:8]
-            elif FID in [T_IPV6_DEV_IID, T_IPV6_APP_IID]: #IID bottom 8
+            elif FID in [YANG_ID[T_IPV6_DEV_IID], YANG_ID[T_IPV6_APP_IID]]: #IID bottom 8
                 return addr.packed[8:]
             else:
                 raise ValueError ("{} Fid not found".format(FID))   

@@ -10,10 +10,12 @@ ietf-schc YANG data model).
 
 Or after installation (`pip install git+https://github.com/ltn22/rule2sor`):
 
-    rule2sor <rule-file.json> [-s <sid-file>] [-o <output.sor>] [-q]
+    rule2sor <rule-file.json> [-s <sid-file>]... [-o <output.sor>] [-q]
 
 By default the output file has the same name as the input with the `.sor`
 extension, and the SID file is the bundled `ietf-schc@2026-05-07.sid`.
+`-s` can be repeated to load several SID files (the bundled one is then not
+loaded unless given explicitly).
 With `-q` only the final message is printed.
 
 If you pass a `.sor` file instead of a JSON file, `rule2sor` will read and print
@@ -37,7 +39,8 @@ This is an extraction of the minimal code from OpenSCHC:
 - `gen_rulemanager.py` — trimmed `RuleManager` keeping:
   - `Add()`: loads a JSON rule file, checks rule integrity (RuleID overlaps,
     valid FID/MO/CDA, one of compression/fragmentation/no-compression per
-    rule) and fills in missing defaults (FL, FP, DI);
+    rule, FP consistent with the order of repeated fields) and fills in
+    missing defaults (FL, FP, DI);
   - `Print()`: displays the rules as ASCII tables;
   - `add_sid_file()` / `to_coreconf()`: serializes the Set of Rules in
     CORECONF/CBOR using the SID values.
@@ -49,3 +52,9 @@ This is an extraction of the minimal code from OpenSCHC:
 
 See the long docstring at the top of `rule2sor/gen_rulemanager.py`, which
 documents the OpenSCHC JSON rule data model (compression and fragmentation).
+
+FID, FL, DI, MO and CDA can be written with the names of the YANG identities
+without their prefix (`ipv6-version`, `length-bytes(16)`, `down`, `equal`,
+`compute`...), looked up in the SID files, or with the old OpenSCHC names
+(`IPV6.VER`, `length-byte(16)`, `DW`, `compute-length`...). Universal options
+are written `coap.option(11)` or `UO(coap, 11)`. See `meteo.json` for an example.
