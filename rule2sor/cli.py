@@ -22,7 +22,7 @@ from pycoreconf import CORECONFModel
 from .gen_rulemanager import RuleManager
 
 DEFAULT_SID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "ietf-schc@2026-05-07.sid")
+                                "ietf-schc@2026-09-22.sid")
 
 def main():
     parser = argparse.ArgumentParser(

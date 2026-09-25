@@ -38,6 +38,8 @@ T_ICMPV6_IDENT = "ICMPV6.IDENT"
 T_ICMPV6_SEQNO = "ICMPV6.SEQNO"
 T_ICMPV6_UNUSED = "ICMPV6.UNUSED"
 T_ICMPV6_PAYLOAD = "ICMPV6.PAYLOAD"
+T_ICMPV6_MTU = "ICMPV6.MTU"
+T_ICMPV6_POINTER = "ICMPV6.POINTER"
 # ICMPv6 types
 T_ICMPV6_TYPE_ECHO_REQUEST = "ICMPV6.TYPE.ECHO.REQUEST"
 T_ICMPV6_TYPE_ECHO_REPLY = "ICMPV6.TYPE.ECHO.REPLY"
@@ -88,6 +90,10 @@ T_OSCORE_KID = "COAP.OSCORE_KID"
 T_OSCORE_KIDCTX = "COAP.OSCORE_KID_CTX"
 T_OSCORE_PIV = "COAP.OSCORE_PIV"
 T_COAP_OPT_END = "COAP.End"
+T_KUDOS_NONCE = "COAP.KUDOS_NONCE"
+T_KUDOS_X = "COAP.KUDOS_X"
+T_KUDOS_X_FLAGS = "COAP.KUDOS_X_FLAGS"
+T_KUDOS_X_M = "COAP.KUDOS_X_M"
 
 T_UNUSED = "UNUSED"
 T_PAYLOAD = "PAYLOAD"
@@ -98,6 +104,9 @@ T_FUNCTION_TKL = "tkl"
 T_FUNCTION_VAR = "var"
 T_FUNCTION_VARBIT = "var_bit"
 T_FUNCTION_TKL = "tkl"
+T_FUNCTION_LENGTH_BYTES = "length-bytes"
+T_FUNCTION_LENGTH_BITS = "length-bits"
+T_FUNCTION_REMAINING = "fl-remaining"
 
 
 T_DIR_UP = "UP"
@@ -108,6 +117,7 @@ T_MO_EQUAL = "EQUAL"
 T_MO_IGNORE = "IGNORE"
 T_MO_MSB = "MSB"
 T_MO_MMAP = "MATCH-MAPPING"
+T_MO_RULE_MATCH = "RULE-MATCH"
 T_MO_MATCH_REV_RULE = "REV-RULE-MATCH"
 
 T_CDA_NOT_SENT = "NOT-SENT"
@@ -120,6 +130,8 @@ T_CDA_DEVIID = "DEVIID"
 T_CDA_APPIID = "APPIID"
 T_CDA_LORA_DEVIID = "COMPUTE-DEVIID"
 T_CDA_REV_COMPRESS = "REV-COMPRESSED-SENT"
+T_CDA_COMPRESS_SENT = "COMPRESSED-SENT"
+T_CDA_REV_COMPRESS_SENT = "REV-COMPRESS-SENT"
 
 T_ALGO = "ALGO"
 T_ALGO_DIRECT = "DIRECT"
@@ -131,6 +143,7 @@ T_DW_RULES = "DW_RULES"
 T_LAST_USED = "LAST_USED"
 
 T_ACTION = "Action"
+T_RULE_NATURE = "RuleNature"
 
 T_COMP = "Compression"
 T_NO_COMP = "NoCompression"
@@ -177,6 +190,9 @@ YANG_ID = {
     T_CDA_COMP_CKSUM: "cda-compute",
     T_CDA_COMP_LEN: "cda-compute",
     T_CDA_DEVIID: "cda-deviid",
+    T_CDA_COMPRESS_SENT: "cda-compress-sent",
+    T_CDA_REV_COMPRESS: "cda-rev-compress-sent",
+    T_CDA_REV_COMPRESS_SENT: "cda-rev-compress-sent",
     T_CDA_LSB: "cda-lsb",
     T_CDA_MAP_SENT: "cda-mapping-sent",
     T_CDA_NOT_SENT: "cda-not-sent",
@@ -187,7 +203,7 @@ YANG_ID = {
     T_COAP_CODE: "fid-coap-code",
     T_COAP_MID: "fid-coap-mid",
     T_OSCORE_FLAGS: "fid-coap-option-oscore-flags",
-    T_OSCORE_FLAGS_FLAGS: "fid-coap-option-oscore-flags-flags",
+    T_OSCORE_FLAGS_FLAGS: "fid-coap-option-oscore-flags-flagbits",
     T_OSCORE_FLAGS_N: "fid-coap-option-oscore-flags-n",
     T_OSCORE_KID: "fid-coap-option-oscore-kid",
     T_OSCORE_KIDCTX: "fid-coap-option-oscore-kidctx",
@@ -213,7 +229,19 @@ YANG_ID = {
     T_UDP_LEN: "fid-udp-length",
     T_FUNCTION_TKL: "fl-token-length",
     T_FUNCTION_VAR: "fl-variable",
-    T_FUNCTION_VARBIT: "fl-variable-bit",
+    T_FUNCTION_VARBIT: "fl-variable-bits",
+    T_FUNCTION_LENGTH_BYTES: "fl-length-bytes",
+    T_FUNCTION_LENGTH_BITS: "fl-length-bits",
+    T_FUNCTION_REMAINING: "fl-remaining",
+    "var-bit": "fl-variable-bits",
+    "fl-variable-bit": "fl-variable-bits",
+    "fl-variable": "fl-variable",
+    "fl-variable-bits": "fl-variable-bits",
+    "fl-token-length": "fl-token-length",
+    "length-byte": "fl-length-bytes",
+    "length-bit": "fl-length-bits",
+    "fl-length-bytes": "fl-length-bytes",
+    "fl-length-bits": "fl-length-bits",
     T_FRAG_ACK_ALWAYS: "fragmentation-mode-ack-always",
     T_FRAG_ACK_ON_ERROR: "fragmentation-mode-ack-on-error",
     T_FRAG_NO_ACK: "fragmentation-mode-no-ack",
@@ -221,6 +249,8 @@ YANG_ID = {
     T_MO_IGNORE: "mo-ignore",
     T_MO_MMAP: "mo-match-mapping",
     T_MO_MSB: "mo-msb",
+    T_MO_MATCH_REV_RULE: "mo-rev-rule-match",
+    T_MO_RULE_MATCH: "mo-rule-match",
     T_FRAG_RFC8724: "rcs-crc32",
     # from OAM 
     T_ICMPV6_CODE: "fid-icmpv6-code",
@@ -229,6 +259,8 @@ YANG_ID = {
     T_ICMPV6_SEQNO: "fid-icmpv6-sequence",
     T_ICMPV6_CKSUM: "fid-icmpv6-checksum",
     T_ICMPV6_PAYLOAD: "fid-icmpv6-payload",
+    T_ICMPV6_MTU: "fid-icmpv6-mtu",
+    T_ICMPV6_POINTER: "fid-icmpv6-pointer",
     # for quentin extension
     T_O_DELTA: "fid-coap-delta-types",
     T_O_LENGTH: "fid-coap-length",
@@ -236,6 +268,10 @@ YANG_ID = {
 
     T_UNUSED: "fid-unused",
     T_PAYLOAD: "fid-payload",
+    T_KUDOS_NONCE: "fid-coap-option-kudos-nonce",
+    T_KUDOS_X: "fid-coap-option-kudos-x",
+    T_KUDOS_X_FLAGS: "fid-coap-option-kudos-x-flagbits",
+    T_KUDOS_X_M: "fid-coap-option-kudos-x-m",
 }
 
 COAP_OPTION_NUMBERS = {
@@ -272,9 +308,11 @@ def adapt_value(value, length=None, FID=None):
         for e in value:
             result.append(adapt_value(e, length, FID))
 
-        return value
+        return result
     
     if type(value) is int:
+        if value < 0:
+            raise ValueError("integer values must be non-negative")
 
         if FID in [T_IPV6_APP_IID, T_IPV6_APP_PREFIX, T_IPV6_DEV_IID, T_IPV6_DEV_PREFIX] and length != None:
             return value.to_bytes(length//8, byteorder='big')

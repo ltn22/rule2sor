@@ -1,0 +1,36 @@
+{
+  "Context": {
+    "GuardPeriod": {
+      "TicksDuration": 20,
+      "TicksNumbers": 10
+    }
+  },
+  "SoR": [
+    {
+      "RuleID": 1,
+      "RuleIDLength": 3,
+      "Compression": [
+        {"FID": "IPV6.VER", "FL": 4, "TV": 6, "MO": "equal", "CDA": "not-sent"},
+        {"FID": "UDP.DEV_PORT", "FL": 16, "TV": 5683, "MO": "equal", "CDA": "not-sent"}
+      ]
+    },
+    {
+      "RuleID": 2,
+      "RuleIDLength": 3,
+      "Compression": [
+        {"FID": "IPV6.NXT", "FL": 8, "TV": 17, "MO": "equal", "CDA": "not-sent"},
+        {"FID": "UDP.APP_PORT", "FL": 16, "TV": 5683, "MO": "equal", "CDA": "not-sent"}
+      ]
+    },
+    {
+      "RuleID": 3,
+      "RuleIDLength": 3,
+      "RuleNature": "Management",
+      "Compression": [
+        {"FID": "IPV6.VER", "FL": 4, "TV": 6, "MO": "equal", "CDA": "not-sent"},
+        {"FID": "UDP.DEV_PORT", "FL": 16, "MO": "ignore", "CDA": "value-sent"},
+        {"FID": "COAP.URI-PATH", "FL": "var", "TV": "rules", "MO": "equal", "CDA": "value-sent"}
+      ]
+    }
+  ]
+}

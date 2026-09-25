@@ -62,6 +62,8 @@ value is a string, it designates a function that can compute the field length. T
   * *var*: the field is of variable length. It will be determined at run time by the protocol analyzer. The length (expressed in bytes) will be transmitted as part of the compression residue. The encoding is described in the SCHC specification.
   * *var_bit*: same as *var*, but the length is expressed in bits instead of bytes.
   * *tkl*: this function is specific for compressing the CoAP Token field. The length of the Token is determined at run time by the protocol analyzer by looking at the Token Length field of he CoAP header.
+  * *fl-length-bytes(index)* and *fl-length-bits(index)*: the field length is read from the earlier entry with the referenced entry index, in bytes or bits respectively.
+  * *fl-remaining*: the field consumes the remaining residue and must be the final entry.
 
 * **FP**: an integer specifying the position in the header of the field this Field Description applies to. The default value is 1. For each recurrence of the same field in the header, the value is increased by 1.
 * **DI**: tells the direction to which this Field Description applies:
@@ -93,7 +95,7 @@ the Field Descriptor matches the case where the field is not present in the head
    * *rev-compressed-sent*: the value sent in the residue is taken from the reverse-direction rule.
 
 * **CDAa**: represents the argument of the CDA. Currently, no CDAa is defined.
-* **Action**: experimental, unvalidated keyword carried through as-is if present; do not rely on it yet.
+* **Action**: explicit top-level rule Action is rejected because this serializer does not yet encode it.
 
 For example::
 
@@ -129,18 +131,18 @@ For example::
 Fragmentation Rules
 -------------------
 
-Fragmentation rules define how the compression and decompression must be performed.
+Fragmentation rules define how fragmentation and reassembly must be performed.
 
 The keyword  **Fragmentation** is followed by a dictionnary containing the different parameters used.
 Inside the keyword **FRMode** indicates which Fragmentation mode is used (**NoAck**, **AckAlways**, **AckOnError**).
 **FRDirection** give the direction of the fragmentation rule. **UP** means that data fragments are sent by the device,
 **DW** for the opposite direction. This entry is mandatory.
-Then the keyword **FRModeProfiler** gives the information needed to create the SCHC fragmentation header and mode profile:
+Then the keyword **FRModeProfile** gives the information needed to create the SCHC fragmentation header and mode profile:
 
-* **dtagSize** gives in bit the size of the dtag field. Defaults to 2 in NoAck, 0 otherwise. This keyword \
+* **dtagSize** gives in bit the size of the dtag field. It defaults to 0 in all fragmentation modes. This keyword \
 can be used by all the fragmentation modes.
-* **WSize** gives in bit the size of Window field. If not present, the default value is 0 (no window) in \
-NoAck and 1 in AckAlways/AckOnError.
+* **WSize** gives in bit the size of Window field. It defaults to 1 in AckAlways/AckOnError. NoAck has no \
+WSize field.
 * **FCNSize** gives in bit the size of the FCN field. If not present, by default, the value is 1 for NoAck.\
 For AckAlways and AckOnError the value must be specified.
 * **windowSize** gives the number of tiles per window. If not present, it defaults to ``2**FCNSize - 1``.
@@ -150,12 +152,12 @@ For AckAlways and AckOnError the value must be specified.
     * *afterAll0*: the bitmap may be expected after the transmission of the window's last fragment (All-0 or All-1).
     * *afterAny*: reserved for future use, not yet enforced by this implementation.
 
-* **lastTileInAll1**: mandatory for AckOnError; must currently be ``false`` (``true`` raises ``NotImplementedError``, this case is not implemented yet).
-* **tileSize** gives the size in bit of a tile. Mandatory for AckOnError.
+* **lastTileInAll1** is optional for AckOnError and accepts ``false``, ``true``, or the YANG sender-choice identity.
+* **tileSize** gives the size in bit of a tile and is optional for AckOnError; an omitted or zero value lets tiles fill the fragment.
 * **MICAlgorithm** gives the algorithm used to compute the RCS, by default **RCS_CRC32**.
 * **L2WordSize** gives the size in bits of the layer-2 word used to pad the last tile, by default 8.
 * **maxRetry** indicates to the sender how many times a fragment or ack request can be sent. Defaults to 4 (AckAlways/AckOnError only).
-* **timeout** indicated in seconds to the sender how many time between two retransmissions. The receiver can compute the delay before aborting. Defaults to 600 (AckAlways/AckOnError only).
+* The scalar **timeout** input is not representable by the current YANG model and is rejected.
 
 For instance::
 
@@ -174,7 +176,6 @@ For instance::
                 "MICAlgorithm": "RCS_CRC32",
                 "L2WordSize": 8,
                 "maxRetry": 4,
-                "timeout": 600,
                 "lastTileInAll1": false
             }
         }
@@ -256,10 +257,9 @@ for this extraction and is not implemented here.
 """
 
 import json
-import struct
 import re
 import warnings
-import cbor2 as cbor
+import base64
 
 from .gen_parameters import *
 
@@ -309,6 +309,8 @@ FIELD__DEFAULT_PROPERTY = {
     T_ICMPV6_SEQNO         : {"FL": 16, "TYPE": int, "ALGO": "DIRECT"  },
     T_ICMPV6_UNUSED        : {"FL": 32, "TYPE": int, "ALGO": "DIRECT"  },
     T_ICMPV6_PAYLOAD       : {"FL": "var", "TYPE": bytes, "ALGO": "DIRECT"  },
+    T_ICMPV6_MTU           : {"FL": 32, "TYPE": int, "ALGO": "DIRECT"  },
+    T_ICMPV6_POINTER       : {"FL": 32, "TYPE": int, "ALGO": "DIRECT"  },
     T_COAP_VERSION         : {"FL": 2,  "TYPE": int, "ALGO": "DIRECT"  },
     T_COAP_TYPE            : {"FL": 2,  "TYPE": int, "ALGO": "DIRECT"  },
     T_COAP_TKL             : {"FL": 4,  "TYPE": int, "ALGO": "DIRECT"  },
@@ -331,8 +333,17 @@ FIELD__DEFAULT_PROPERTY = {
     T_O_LENGTH             : {"FL": 4, "TYPE": int, "ALGO": "COAP_OPTION"},
     T_O_VALUE              : {"FL": "var", "TYPE": bytes, "ALGO": "COAP_OPTION"},
     T_UNUSED                : {"FL": "var", "TYPE": bytes, "ALGO": "DIRECT"},
-    T_PAYLOAD               : {"FL": "var", "TYPE": bytes, "ALGO": "DIRECT"}
+    T_PAYLOAD               : {"FL": "fl-remaining", "TYPE": bytes, "ALGO": "DIRECT"}
 }
+
+# FIDs added by the current working model.  Their wire types are intentionally
+# kept generic here; adapt_value performs the OpenSCHC value conversion.
+FIELD__DEFAULT_PROPERTY.update({
+    T_KUDOS_NONCE: {"FL": "var", "TYPE": bytes, "ALGO": "DIRECT"},
+    T_KUDOS_X: {"FL": 8, "TYPE": int, "ALGO": "DIRECT"},
+    T_KUDOS_X_FLAGS: {"FL": 4, "TYPE": int, "ALGO": "DIRECT"},
+    T_KUDOS_X_M: {"FL": 4, "TYPE": int, "ALGO": "DIRECT"},
+})
 
 class RuleManager:
     """
@@ -376,13 +387,34 @@ class RuleManager:
         if file != None:
             dev_info = json.loads(open(file).read())
 
+        if isinstance(dev_info, list):
+            input_rules = dev_info
+        elif isinstance(dev_info, dict):
+            if T_RULEID in dev_info or T_RULEIDVALUE in dev_info:
+                input_rules = [dev_info]
+            else:
+                input_rules = dev_info.get("SoR", [])
+        else:
+            input_rules = []
+        if any(isinstance(rule, dict) and T_ACTION in rule for rule in input_rules):
+            raise ValueError("Action is not supported")
+
+        # Context is document-scoped. Do not carry it into a later document
+        # loaded by the same manager when that document has no Context member.
+        self._management_context = None
+
         if type(dev_info) is dict: #Context or Rules
-            if T_RULEID in dev_info: # Rules
+            if T_RULEID in dev_info or T_RULEIDVALUE in dev_info: # Rules
                 sor = [dev_info]
             elif "SoR" in dev_info:
                 if "DeviceID" in dev_info:
                     device = dev_info["DeviceID"]
                 sor = dev_info["SoR"]
+                if "Context" in dev_info:
+                    self._set_management_context(dev_info["Context"])
+            elif "Context" in dev_info:
+                self._set_management_context(dev_info["Context"])
+                sor = dev_info.get("SoR", [])
             else:
                 raise ValueError("unknown format")
         elif type(dev_info) is list: # a Set of Rule
@@ -410,37 +442,118 @@ class RuleManager:
                 n_ruleID = n_rule[T_RULEIDVALUE]
             else:
                 raise ValueError("Rule ID Value is missing")
-            n_ruleLength = n_rule[T_RULEIDLENGTH]
-            left_aligned_n_ruleID = n_ruleID << (32 - n_ruleLength)
-
+            n_ruleLength = self._validate_rule_id(n_ruleID, n_rule.get(T_RULEIDLENGTH))
+            nature = self._requested_nature(n_rule)
+            kinds = [key for key in (T_COMP, T_FRAG, T_NO_COMP) if key in n_rule]
+            if len(kinds) != 1:
+                raise ValueError("Rule must contain exactly one of Compression, Fragmentation, or NoCompression")
+            if nature is not None and nature == "management" and T_COMP not in n_rule:
+                raise ValueError("Management Rule must contain Compression entries")
             overlap = False
             for e_rule in d["SoR"]: # check no overlaps on RuleID
-                left_aligned_e_ruleID = e_rule[T_RULEID] << (32 - e_rule[T_RULEIDLENGTH])
-                if left_aligned_e_ruleID == left_aligned_n_ruleID:
+                self._validate_rule_id(e_rule[T_RULEID], e_rule[T_RULEIDLENGTH])
+                if self._rule_ids_overlap(n_ruleID, n_ruleLength,
+                                          e_rule[T_RULEID], e_rule[T_RULEIDLENGTH]):
                     print ("Warning; Rule {}/{} exists not inserted".format(bin(n_ruleID), n_ruleLength) )
                     overlap = True
                     break
 
             if not overlap:
                 if T_COMP in n_rule:
+                    if nature not in (None, "compression", "management"):
+                        raise ValueError("Compression cannot be used with RuleNature {}".format(n_rule[T_RULE_NATURE]))
                     r = self._create_compression_rule(n_rule, device)
                     d["SoR"].append(r)
                 elif T_FRAG in n_rule:
+                    if nature not in (None, "fragmentation"):
+                        raise ValueError("Fragmentation cannot be used with RuleNature {}".format(n_rule[T_RULE_NATURE]))
                     r = self._create_fragmentation_rule(n_rule)
                     d["SoR"].append(r)
                 elif T_NO_COMP in n_rule:
+                    if nature not in (None, "no-compression"):
+                        raise ValueError("NoCompression cannot be used with RuleNature {}".format(n_rule[T_RULE_NATURE]))
                     already_exists = self.FindNoCompressionRule(deviceID=device)
                     if already_exists == None:
                         arule = {}
                         arule[T_RULEID] = n_ruleID
                         arule[T_RULEIDLENGTH] = n_rule[T_RULEIDLENGTH]
                         arule[T_NO_COMP] = []
+                        arule[T_RULE_NATURE] = "no-compression"
                         d["SoR"].append(arule)
                     else:
                         print ("Warning 'no compression' rule already exists")
                 else:
                     raise ValueError ("Rule type undefined")
                 #print (n_rule)
+
+    def _validate_rule_id(self, value, length):
+        """Validate the RFC 9363 RuleID bit string before it is shifted."""
+        if type(value) is not int:
+            raise ValueError("RuleID must be an integer")
+        if type(length) is not int:
+            raise ValueError("RuleIDLength must be an integer")
+        if not 0 <= length <= 32:
+            raise ValueError("RuleIDLength must be in the RFC 9363 range 0..32")
+        if length == 0 and value != 0:
+            raise ValueError("RuleID must be 0 when RuleIDLength is 0")
+        if value < 0 or value >= (1 << length):
+            raise ValueError("RuleID must fit in RuleIDLength bits")
+        return length
+
+    def _rule_ids_overlap(self, first_value, first_length, second_value, second_length):
+        """Return whether either RuleID is a prefix of the other."""
+        if first_length <= second_length:
+            return first_value == (second_value >> (second_length - first_length))
+        return second_value == (first_value >> (first_length - second_length))
+
+    def _requested_nature(self, rule):
+        """Return the normalized nature requested by an input Rule."""
+        raw = rule.get(T_RULE_NATURE)
+        if raw is None:
+            return None
+        name = str(raw).strip().lower().replace("_", "-")
+        aliases = {
+            "compression": "compression", "nature-compression": "compression",
+            "management": "management", "nature-management": "management",
+            "fragmentation": "fragmentation", "nature-fragmentation": "fragmentation",
+            "no-compression": "no-compression", "nocompression": "no-compression",
+            "nature-no-compression": "no-compression",
+        }
+        if name not in aliases:
+            raise ValueError("Unknown RuleNature {!r}".format(raw))
+        return aliases[name]
+
+    def _set_management_context(self, context):
+        if not isinstance(context, dict):
+            raise ValueError("Context must be an object")
+        context_aliases = {
+            "GuardPeriod": "guard-period", "guard-period": "guard-period",
+        }
+        for key in context:
+            if key not in context_aliases:
+                raise ValueError("Unknown context member {!r}".format(key))
+        guard = context.get("GuardPeriod", context.get("guard-period"))
+        if guard is None:
+            self._management_context = {}
+            return
+        if not isinstance(guard, dict):
+            raise ValueError("Context.GuardPeriod must be an object")
+        normalized = {}
+        aliases = {
+            "TicksDuration": "ticks-duration", "ticks-duration": "ticks-duration",
+            "TicksNumbers": "ticks-numbers", "ticks-numbers": "ticks-numbers",
+        }
+        for key, value in guard.items():
+            if key not in aliases:
+                raise ValueError("Unknown guard-period member {!r}".format(key))
+            if type(value) is not int:
+                raise ValueError("guard-period {} must be an integer".format(aliases[key]))
+            if aliases[key] == "ticks-duration" and not 0 <= value <= 255:
+                raise ValueError("guard-period ticks-duration must be 0..255")
+            if aliases[key] == "ticks-numbers" and not 0 <= value <= 65535:
+                raise ValueError("guard-period ticks-numbers must be 0..65535")
+            normalized[aliases[key]] = value
+        self._management_context = {"guard-period": normalized}
 
     def _create_fragmentation_rule (self, nrule):
         arule = {}
@@ -452,69 +565,188 @@ class RuleManager:
             raise ValueError("Rule ID missing.")
         arule[T_RULEIDLENGTH] = nrule[T_RULEIDLENGTH]
         arule[T_FRAG] = {}
+        arule[T_RULE_NATURE] = "fragmentation"
 
-        def _default_value (ar, nr, idx, default=None, failed=False):
-            if failed and not idx in nr[T_FRAG][T_FRAG_PROF]:
+        raw_profile = nrule[T_FRAG].get(T_FRAG_PROF, {})
+        if raw_profile is None:
+            raw_profile = {}
+        if not isinstance(raw_profile, dict):
+            raise ValueError("FRModeProfile must be an object")
+        aliases = {
+            T_FRAG_DTAG_SIZE: T_FRAG_DTAG_SIZE, "dtag-size": T_FRAG_DTAG_SIZE,
+            T_FRAG_W_SIZE: T_FRAG_W_SIZE, "w-size": T_FRAG_W_SIZE,
+            T_FRAG_FCN: T_FRAG_FCN, "fcn-size": T_FRAG_FCN,
+            T_FRAG_WINDOW_SIZE: T_FRAG_WINDOW_SIZE, "window-size": T_FRAG_WINDOW_SIZE,
+            T_FRAG_L2WORDSIZE: T_FRAG_L2WORDSIZE, "l2-word-size": T_FRAG_L2WORDSIZE,
+            T_FRAG_TILE: T_FRAG_TILE, "tile-size": T_FRAG_TILE,
+            T_FRAG_MAX_RETRY: T_FRAG_MAX_RETRY, "max-ack-requests": T_FRAG_MAX_RETRY,
+            T_MAX_INTER_FRAME: T_MAX_INTER_FRAME, "max-interleaved-frames": T_MAX_INTER_FRAME,
+            T_MAX_PACKET_SIZE: T_MAX_PACKET_SIZE, "maximum-packet-size": T_MAX_PACKET_SIZE,
+            T_FRAG_MIC: T_FRAG_MIC, "rcs-algorithm": T_FRAG_MIC,
+            T_FRAG_ACK_BEHAVIOR: T_FRAG_ACK_BEHAVIOR, "ack-behavior": T_FRAG_ACK_BEHAVIOR,
+            T_FRAG_LAST_TILE_IN_ALL1: T_FRAG_LAST_TILE_IN_ALL1, "tile-in-all-1": T_FRAG_LAST_TILE_IN_ALL1,
+            "BitmapFormat": "BitmapFormat", "bitmap-format": "BitmapFormat",
+            "LastBitmapCompression": "LastBitmapCompression", "last-bitmap-compression": "LastBitmapCompression",
+            "InactivityTimer": "InactivityTimer", "inactivity-timer": "InactivityTimer",
+            "RetransmissionTimer": "RetransmissionTimer", "retransmission-timer": "RetransmissionTimer",
+            T_FRAG_TIMEOUT: T_FRAG_TIMEOUT, "Timeout": T_FRAG_TIMEOUT,
+        }
+        profile = {}
+        for key, value in raw_profile.items():
+            canonical = aliases.get(key)
+            if canonical is None:
+                raise ValueError("Unknown fragmentation profile member {!r}".format(key))
+            if canonical in profile:
+                raise ValueError("Duplicate fragmentation profile member {!r}".format(key))
+            profile[canonical] = value
+        if T_FRAG_TIMEOUT in profile:
+            raise ValueError(
+                "Unsupported fragmentation timer {!r}: scalar timeout is not representable in the current model".format(T_FRAG_TIMEOUT)
+            )
+
+        def _uint(name, value, maximum, minimum=0):
+            if type(value) is not int or not minimum <= value <= maximum:
+                bounds = "{}..{}".format(minimum, maximum)
+                raise ValueError("{} must be an integer in {}".format(name, bounds))
+            return value
+
+        def _timer(name, value, minimum_ticks):
+            if not isinstance(value, dict):
+                raise ValueError("{} must be an object".format(name))
+            timer_aliases = {
+                "TicksDuration": "ticks-duration", "ticks-duration": "ticks-duration",
+                "TicksNumbers": "ticks-numbers", "ticks-numbers": "ticks-numbers",
+            }
+            result = {}
+            for key, item in value.items():
+                target = timer_aliases.get(key)
+                if target is None:
+                    raise ValueError("Unknown {} member {!r}".format(name, key))
+                if target in result:
+                    raise ValueError("Duplicate {} member {!r}".format(name, key))
+                result[target] = _uint(
+                    "{}.{}".format(name, target), item,
+                    255 if target == "ticks-duration" else 65535,
+                    minimum_ticks if target == "ticks-numbers" else 0,
+                )
+            return result
+
+        if "InactivityTimer" in profile:
+            profile["InactivityTimer"] = _timer("InactivityTimer", profile["InactivityTimer"], 0)
+        if "RetransmissionTimer" in profile:
+            if nrule[T_FRAG].get(T_FRAG_MODE) not in [T_FRAG_ACK_ALWAYS, T_FRAG_ACK_ON_ERROR]:
+                raise ValueError("RetransmissionTimer is only valid for AckAlways or AckOnError")
+            profile["RetransmissionTimer"] = _timer("RetransmissionTimer", profile["RetransmissionTimer"], 1)
+
+        def _default_value (ar, idx, default=None, failed=False):
+            if failed and idx not in profile:
                 raise ValueError ("{} not found".format(idx))
+            ar[T_FRAG][T_FRAG_PROF][idx] = profile.get(idx, default)
 
-            if not T_FRAG_PROF in nr[T_FRAG] or not idx in nr[T_FRAG][T_FRAG_PROF]:
-                ar[T_FRAG][T_FRAG_PROF][idx] = default
-            else:
-                ar[T_FRAG][T_FRAG_PROF][idx] = nr[T_FRAG][T_FRAG_PROF][idx]
-
-        if not T_FRAG_DIRECTION in nrule[T_FRAG]:
+        if T_FRAG_DIRECTION not in nrule[T_FRAG]:
             raise ValueError ("Keyword {} must be specified with {} or {}".format(T_FRAG_DIRECTION, T_DIR_UP, T_DIR_DW))
-
-        if not nrule[T_FRAG][T_FRAG_DIRECTION] in [T_DIR_UP, T_DIR_DW]:
+        if nrule[T_FRAG][T_FRAG_DIRECTION] not in [T_DIR_UP, T_DIR_DW]:
             raise ValueError ("Keyword {} must be {} or {}".format(T_FRAG_DIRECTION, T_DIR_UP, T_DIR_DW))
+        arule[T_FRAG][T_FRAG_DIRECTION] = nrule[T_FRAG][T_FRAG_DIRECTION]
 
-        arule[T_FRAG][T_FRAG_DIRECTION] = nrule[T_FRAG][T_FRAG_DIRECTION] 
+        mode = nrule[T_FRAG].get(T_FRAG_MODE)
+        if mode not in [T_FRAG_NO_ACK, T_FRAG_ACK_ALWAYS, T_FRAG_ACK_ON_ERROR]:
+            if mode is None:
+                raise ValueError("No fragmentation mode")
+            raise ValueError("Unknown fragmentation mode", mode)
+        arule[T_FRAG][T_FRAG_MODE] = mode
+        arule[T_FRAG][T_FRAG_PROF] = {}
+        _default_value(arule, T_FRAG_FCN)
+        _default_value(arule, T_FRAG_DTAG_SIZE, 0)
+        _default_value(arule, T_FRAG_MIC, T_FRAG_RFC8724)
 
-
-        if  T_FRAG_MODE in nrule[T_FRAG]:
-            if not T_FRAG_PROF in nrule[T_FRAG]:
-                arule[T_FRAG][T_FRAG_MODE] = {}
-
-            if nrule[T_FRAG][T_FRAG_MODE] in [T_FRAG_NO_ACK, T_FRAG_ACK_ALWAYS, T_FRAG_ACK_ON_ERROR]:
-                arule[T_FRAG][T_FRAG_MODE] = nrule[T_FRAG][T_FRAG_MODE]
-                arule[T_FRAG][T_FRAG_PROF] ={}
-
-                _default_value (arule, nrule, T_FRAG_FCN)
-                _default_value (arule, nrule, T_FRAG_DTAG_SIZE, 0)
-                _default_value (arule, nrule, T_FRAG_MIC, T_FRAG_RFC8724)
-
-                if nrule[T_FRAG][T_FRAG_MODE] == T_FRAG_NO_ACK:
-                    _default_value(arule, nrule, T_FRAG_DTAG_SIZE, 2)
-                    _default_value (arule, nrule, T_FRAG_W_SIZE, 0)
-                    _default_value (arule, nrule, T_FRAG_FCN, 1)
-                    _default_value(arule, nrule, T_FRAG_L2WORDSIZE, 8)
-                elif nrule[T_FRAG][T_FRAG_MODE] == T_FRAG_ACK_ALWAYS:
-                    _default_value (arule, nrule, T_FRAG_W_SIZE, 1)
-                    _default_value(arule, nrule, T_FRAG_L2WORDSIZE, 8)
-                    _default_value (arule, nrule, T_FRAG_MAX_RETRY, 4)
-                    _default_value (arule, nrule, T_FRAG_TIMEOUT, 600)
-                elif  nrule[T_FRAG][T_FRAG_MODE] == T_FRAG_ACK_ON_ERROR:
-                    if not T_FRAG_FCN in nrule[T_FRAG][T_FRAG_PROF]:
-                        raise ValueError ("FCN Must be specified for Ack On Error")
-
-                    _default_value (arule, nrule, T_FRAG_W_SIZE, 1)
-                    _default_value (arule, nrule, T_FRAG_ACK_BEHAVIOR, T_FRAG_AFTER_ALL1)
-                    _default_value (arule, nrule, T_FRAG_TILE, None, True)
-                    _default_value (arule, nrule, T_FRAG_MAX_RETRY, 4)
-                    _default_value (arule, nrule, T_FRAG_TIMEOUT, 600)
-                    _default_value (arule, nrule, T_FRAG_L2WORDSIZE, 8)
-                    _default_value (arule, nrule, T_FRAG_LAST_TILE_IN_ALL1, None, True)
-
-                    if nrule[T_FRAG][T_FRAG_PROF][T_FRAG_LAST_TILE_IN_ALL1] == True:
-                        raise NotImplementedError ("Last tile in All-1 is not implemented yet")
-
-                # the size include All-*, Max_VLAUE is WINDOW_SIZE-1
-                _default_value(arule, nrule, T_FRAG_WINDOW_SIZE, (0x01 <<(arule[T_FRAG][T_FRAG_PROF][T_FRAG_FCN]))-1)
-            else:
-                raise ValueError ("Unknown fragmentation mode", nrule[T_FRAG][T_FRAG_MODE])
+        if mode == T_FRAG_NO_ACK:
+            for key in (T_FRAG_W_SIZE, T_FRAG_MAX_RETRY, T_FRAG_ACK_BEHAVIOR,
+                        T_FRAG_TILE, T_FRAG_LAST_TILE_IN_ALL1, "BitmapFormat",
+                        "LastBitmapCompression", "RetransmissionTimer"):
+                if key in profile:
+                    raise ValueError("{} is not valid for NoAck".format(key))
+            _default_value(arule, T_FRAG_DTAG_SIZE, 0)
+            _default_value(arule, T_FRAG_FCN, 1)
+            _default_value(arule, T_FRAG_L2WORDSIZE, 8)
+        elif mode == T_FRAG_ACK_ALWAYS:
+            if T_FRAG_FCN not in profile:
+                raise ValueError("FCNSize must be specified for AckAlways")
+            for key in (T_FRAG_ACK_BEHAVIOR, T_FRAG_TILE, T_FRAG_LAST_TILE_IN_ALL1,
+                        "BitmapFormat", "LastBitmapCompression"):
+                if key in profile:
+                    raise ValueError("{} is not valid for AckAlways".format(key))
+            _default_value(arule, T_FRAG_W_SIZE, 1)
+            _default_value(arule, T_FRAG_L2WORDSIZE, 8)
+            _default_value(arule, T_FRAG_MAX_RETRY, 4)
         else:
-            raise ValueError("No fragmentation mode")
+            if T_FRAG_FCN not in profile:
+                raise ValueError("FCNSize must be specified for AckOnError")
+            _default_value(arule, T_FRAG_W_SIZE, 1)
+            _default_value(arule, T_FRAG_ACK_BEHAVIOR, T_FRAG_AFTER_ALL1)
+            if T_FRAG_TILE in profile:
+                _default_value(arule, T_FRAG_TILE)
+            _default_value(arule, T_FRAG_MAX_RETRY, 4)
+            _default_value(arule, T_FRAG_L2WORDSIZE, 8)
+            if T_FRAG_LAST_TILE_IN_ALL1 in profile:
+                value = profile[T_FRAG_LAST_TILE_IN_ALL1]
+                if type(value) is bool:
+                    value = "all-1-data-yes" if value else "all-1-data-no"
+                elif isinstance(value, str):
+                    value = {
+                        "yes": "all-1-data-yes", "all-1-data-yes": "all-1-data-yes",
+                        "no": "all-1-data-no", "all-1-data-no": "all-1-data-no",
+                        "sender-choice": "all-1-data-sender-choice",
+                        "all-1-data-sender-choice": "all-1-data-sender-choice",
+                    }.get(value.strip().lower().replace("_", "-"))
+                    if value is None:
+                        raise ValueError("Unknown lastTileInAll1 value")
+                else:
+                    raise ValueError("lastTileInAll1 must be a boolean or YANG all-1 identity")
+                arule[T_FRAG][T_FRAG_PROF][T_FRAG_LAST_TILE_IN_ALL1] = value
+            if "BitmapFormat" in profile:
+                value = profile["BitmapFormat"]
+                if not isinstance(value, str):
+                    raise ValueError("BitmapFormat must be a string identity")
+                value = {
+                    "rfc8724": "bitmap-RFC8724", "bitmap-rfc8724": "bitmap-RFC8724",
+                    "compound-ack": "bitmap-compound-ack", "bitmap-compound-ack": "bitmap-compound-ack",
+                }.get(value.strip().lower().replace("_", "-"))
+                if value is None:
+                    raise ValueError("Unknown BitmapFormat")
+                arule[T_FRAG][T_FRAG_PROF]["BitmapFormat"] = value
+            if "LastBitmapCompression" in profile:
+                value = profile["LastBitmapCompression"]
+                if type(value) is not bool:
+                    raise ValueError("LastBitmapCompression must be a boolean")
+                arule[T_FRAG][T_FRAG_PROF]["LastBitmapCompression"] = value
 
+        if T_MAX_INTER_FRAME in profile:
+            arule[T_FRAG][T_FRAG_PROF][T_MAX_INTER_FRAME] = profile[T_MAX_INTER_FRAME]
+
+        fcn = _uint("FCNSize", arule[T_FRAG][T_FRAG_PROF][T_FRAG_FCN], 255)
+        _default_value(arule, T_FRAG_WINDOW_SIZE, (1 << fcn) - 1)
+        for name, maximum in ((T_FRAG_DTAG_SIZE, 255), (T_FRAG_FCN, 255),
+                              (T_FRAG_L2WORDSIZE, 255), (T_FRAG_WINDOW_SIZE, 65535)):
+            arule[T_FRAG][T_FRAG_PROF][name] = _uint(
+                name, arule[T_FRAG][T_FRAG_PROF][name], maximum
+            )
+        for name in (T_FRAG_W_SIZE, T_FRAG_TILE, T_MAX_INTER_FRAME):
+            if name in arule[T_FRAG][T_FRAG_PROF]:
+                arule[T_FRAG][T_FRAG_PROF][name] = _uint(
+                    name, arule[T_FRAG][T_FRAG_PROF][name], 255
+                )
+        if T_FRAG_MAX_RETRY in arule[T_FRAG][T_FRAG_PROF]:
+            arule[T_FRAG][T_FRAG_PROF][T_FRAG_MAX_RETRY] = _uint(
+                T_FRAG_MAX_RETRY, arule[T_FRAG][T_FRAG_PROF][T_FRAG_MAX_RETRY], 255, 1
+            )
+        if T_MAX_PACKET_SIZE in profile:
+            arule[T_FRAG][T_FRAG_PROF][T_MAX_PACKET_SIZE] = _uint(
+                T_MAX_PACKET_SIZE, profile[T_MAX_PACKET_SIZE], 65535
+            )
+        for name in ("InactivityTimer", "RetransmissionTimer"):
+            if name in profile:
+                arule[T_FRAG][T_FRAG_PROF][name] = profile[name]
         return arule
 
     def get_values(self, values):
@@ -544,53 +776,77 @@ class RuleManager:
         else:
             raise ValueError("RuleID Value is missing")
         arule[T_RULEIDLENGTH] = nrule[T_RULEIDLENGTH]
-
-        if T_ACTION in nrule:
-             print ("Warning: using experimental Action")
-             arule[T_ACTION] = nrule[T_ACTION]
-
-
+        requested = self._requested_nature(nrule)
+        arule[T_RULE_NATURE] = requested or "compression"
 
         arule[T_COMP] = []
 
         up_rules = 0
         dw_rules = 0
 
+        if not isinstance(nrule[T_COMP], list):
+            raise ValueError("Compression must be an array of entries")
+
         for r in nrule[T_COMP]:
-            if r["FID"] == T_COAP_OPT_END:
+            raw_fid = str(r[T_FID]).upper()
+            if raw_fid == T_COAP_OPT_END.upper():
                 # XXX: check ignoring is the proper behavior, or what should be done the T_COAP_OPT_END
                 # which is still generated by the parser but was not handled by this code.
                 warnings.warn("Note: T_COAP_OPT_END is ignored")
                 continue
 
 
-            if not'COAP.option' in r["FID"] and not r["FID"].upper() in FIELD__DEFAULT_PROPERTY  :
+            if not ('COAP.OPTION' in raw_fid or raw_fid in FIELD__DEFAULT_PROPERTY):
                 raise ValueError( "Unkwown field id {} in rule {}/{}".format(
                     r["FID"], arule[T_RULEID],  arule[T_RULEIDLENGTH]
                 ))
             
             entry = {}
-            FID = r[T_FID].upper()
+            if "EntryIndex" in r or "entry-index" in r:
+                entry["EntryIndex"] = r.get("EntryIndex", r.get("entry-index"))
+            FID = raw_fid
             entry[T_FID] = FID
             if 'COAP.OPTION' not in FID:
                 entry[T_FL] = self._return_default(r, T_FL, FIELD__DEFAULT_PROPERTY[FID][T_FL])
             else:
                 entry[T_FL] = self._return_default(r, T_FL, "var")
+            entry[T_FL], fl_arg = self._normalize_field_length(entry[T_FL], r)
+            if fl_arg is not None:
+                entry["FieldLengthValue"] = fl_arg
 
             entry[T_FP] = self._return_default(r, T_FP, 1)
+            if type(entry[T_FP]) is not int or not 0 <= entry[T_FP] <= 255:
+                raise ValueError("FP must be an integer in 0..255")
             entry[T_DI] = self._return_default(r, T_DI, T_DIR_BI)
+            if entry[T_DI] not in (T_DIR_BI, T_DIR_UP, T_DIR_DW):
+                raise ValueError("DI must be BI, UP, or DW")
             if entry[T_DI] in [T_DIR_BI, T_DIR_UP]: up_rules += 1
             if entry[T_DI] in [T_DIR_BI, T_DIR_DW]: dw_rules += 1
 
-            MO = r[T_MO].upper()
-            if MO in [T_MO_EQUAL, T_MO_MSB, T_MO_IGNORE, T_MO_MATCH_REV_RULE]:
+            MO = self._normalize_operator(r[T_MO])
+            def _has_target(value):
+                if value is None:
+                    return False
+                if isinstance(value, (list, tuple)):
+                    return len(value) > 0
+                if isinstance(value, dict):
+                    return len(value) > 0 and all(_has_target(item)
+                                                 for item in value.values())
+                return True
+
+            target_present = T_TV in r and _has_target(r[T_TV])
+            if MO != T_MO_IGNORE and not target_present:
+                raise ValueError(
+                    "{} matching operator {} requires a non-empty TV".format(FID, MO)
+                )
+            if MO in [T_MO_EQUAL, T_MO_MSB, T_MO_IGNORE, T_MO_MATCH_REV_RULE, "RULE-MATCH"]:
                 if MO == T_MO_MSB:
                     if T_MO_VAL in r:
                         entry[T_MO_VAL] = r[T_MO_VAL]
                     else:
                         raise ValueError ("MO Value missing for {}".format(FID))
 
-                if T_TV in  r:
+                if T_TV in r and target_present:
                     if type(r[T_TV]) is dict:
                         if len(r[T_TV]) != 1:
                             raise ValueError(FID+": Only one command for TV.")
@@ -599,17 +855,22 @@ class RuleManager:
                             raise ValueError(FID+": Unknown TV command.")
 
                         dic = r[T_TV] # set value to bytearray
-                        key = next(iter(dic))
                         val = list(dic.values())[0]
 
 
-                        entry[T_TV_IND] = adapt_value(key,entry[T_FL], FID)
+                        # The legacy input uses {"INDIRECT": value}.  The
+                        # current YANG model has no separate indirect-TV
+                        # member, so retain the value as target-value instead
+                        # of silently dropping it during serialization.
+                        entry[T_TV] = adapt_value(val, entry[T_FL], FID)
                     else:
                         entry[T_TV] = adapt_value(r[T_TV], entry[T_FL], FID)
                 else:
                     entry[T_TV] = None
 
             elif MO == T_MO_MMAP:
+                if not isinstance(r[T_TV], list):
+                    raise ValueError("MATCH-MAPPING requires TV to be a list")
                 entry[T_TV] = []
                 for e in r[T_TV]:
                     entry[T_TV].append(adapt_value(e, entry[T_FL], FID))
@@ -618,13 +879,37 @@ class RuleManager:
                 raise ValueError("{} MO unknown".format(MO))
             entry[T_MO] = MO
 
-            CDA = r[T_CDA].upper()
+            CDA = self._normalize_cda(r[T_CDA])
             if not CDA in [T_CDA_NOT_SENT, T_CDA_VAL_SENT, T_CDA_MAP_SENT, T_CDA_LSB, T_CDA_COMP_LEN, 
-                           T_CDA_COMP_CKSUM, T_CDA_DEVIID, T_CDA_APPIID, T_CDA_REV_COMPRESS]:
+                           T_CDA_COMP_CKSUM, T_CDA_DEVIID, T_CDA_APPIID, T_CDA_REV_COMPRESS,
+                           T_CDA_COMPRESS_SENT, T_CDA_REV_COMPRESS_SENT]:
                 raise ValueError("{} CDA not found".format(CDA))
+            if CDA not in (T_CDA_VAL_SENT, T_CDA_COMP_LEN, T_CDA_COMP_CKSUM,
+                           T_CDA_DEVIID, T_CDA_APPIID) and not target_present:
+                raise ValueError(
+                    "{} CDA {} requires a non-empty TV".format(FID, CDA)
+                )
             entry[T_CDA] = CDA
 
             arule[T_COMP].append(entry)
+
+        indexes = self._entry_indexes(arule[T_COMP])
+        available_indexes = set(indexes)
+        for entry in arule[T_COMP]:
+            if ("FieldLengthValue" in entry and
+                    entry["FieldLengthValue"] not in available_indexes):
+                raise ValueError(
+                    "field-length-value {} does not name an entry index present in the rule".format(
+                        entry["FieldLengthValue"]
+                    )
+                )
+
+        for position, entry in enumerate(arule[T_COMP]):
+            is_last = position == len(arule[T_COMP]) - 1
+            if entry[T_FL] == T_FUNCTION_REMAINING and not is_last:
+                raise ValueError("fl-remaining is only valid on the final compression entry")
+            if entry[T_FID] == T_PAYLOAD and (entry[T_FL] != T_FUNCTION_REMAINING or not is_last):
+                raise ValueError("fid-payload must use fl-remaining as the final compression entry")
 
         if not T_META in arule:
             arule[T_META] = {}
@@ -635,12 +920,74 @@ class RuleManager:
 
         return arule
 
+    def _normalize_operator(self, value):
+        value = str(value).upper().replace("_", "-")
+        aliases = {"RULE-MATCH": "RULE-MATCH", "MO-RULE-MATCH": "RULE-MATCH",
+                   "REV-RULE-MATCH": T_MO_MATCH_REV_RULE,
+                   "MO-REV-RULE-MATCH": T_MO_MATCH_REV_RULE}
+        return aliases.get(value, value)
+
+    def _normalize_cda(self, value):
+        value = str(value).upper().replace("_", "-")
+        return {"REV-COMPRESSED-SENT": T_CDA_REV_COMPRESS,
+                "REV-COMPRESS-SENT": T_CDA_REV_COMPRESS_SENT,
+                "COMPRESS-SENT": T_CDA_COMPRESS_SENT}.get(value, value)
+
+    def _normalize_field_length(self, value, raw_entry=None):
+        """Normalize old strings and structured FL values to (name/int, arg)."""
+        supplied_arg = None
+        if raw_entry:
+            for key in ("FieldLengthValue", "FLValue", "Field-Length-Value", "field-length-value"):
+                if key in raw_entry:
+                    supplied_arg = raw_entry[key]
+                    break
+        if isinstance(value, dict):
+            name = value.get("Function", value.get("function", value.get("Name", value.get("name", value.get("Type")))))
+            supplied_arg = value.get("EntryIndex", value.get("entry-index", value.get("Index", value.get("index", value.get("Value", supplied_arg)))))
+            if name is None:
+                raise ValueError("Structured FL requires Function/Name")
+            value = name
+        if type(value) is int:
+            if supplied_arg is not None:
+                raise ValueError("field-length-value is only valid for fl-length-bytes/bits")
+            if not 0 <= value <= 255:
+                raise ValueError("fixed field length must be 0..255")
+            return value, None
+        name = str(value).strip().lower().replace("_", "-")
+        match = re.fullmatch(r"(.+?)\((\d+)\)", name)
+        if match:
+            name, parsed = match.groups()
+            if supplied_arg is not None and int(supplied_arg) != int(parsed):
+                raise ValueError("conflicting field-length-value")
+            supplied_arg = int(parsed)
+        aliases = {"var": "fl-variable", "variable": "fl-variable", "fl-variable": "fl-variable",
+                   "var-bit": "fl-variable-bits", "var-bit(s)": "fl-variable-bits",
+                   "var-bits": "fl-variable-bits", "fl-variable-bit": "fl-variable-bits",
+                   "fl-variable-bits": "fl-variable-bits", "tkl": "fl-token-length",
+                   "fl-token-length": "fl-token-length", "length-byte": "fl-length-bytes",
+                   "length-bytes": "fl-length-bytes", "fl-length-bytes": "fl-length-bytes",
+                   "length-bit": "fl-length-bits", "length-bits": "fl-length-bits",
+                   "fl-length-bits": "fl-length-bits", "fl-remaining": "fl-remaining"}
+        canonical = aliases.get(name)
+        if canonical is None:
+            raise ValueError("Unknown field length function {!r}".format(value))
+        if canonical in ("fl-length-bytes", "fl-length-bits"):
+            if supplied_arg is None:
+                raise ValueError("{} requires field-length-value entry-index".format(canonical))
+            if type(supplied_arg) is not int or not 0 <= supplied_arg <= 65535:
+                raise ValueError("field-length-value must be a uint16 entry index (0..65535)")
+        elif supplied_arg is not None:
+            raise ValueError("field-length-value is not valid for {}".format(canonical))
+        return canonical, supplied_arg
+
     def __init__(self, file=None, log=None):
         #RM database
         self._ctxt = []
         self._log = log
         self._db = []
         self._sid_info = []
+        self._sid_files = []
+        self._management_context = None
 
     def _smart_print(self, v):
         if type(v) is str:
@@ -727,7 +1074,7 @@ class RuleManager:
                             dir_c,
                             rule[T_FRAG][T_FRAG_MODE],
                             rule[T_FRAG][T_FRAG_PROF][T_FRAG_DTAG_SIZE],
-                            rule[T_FRAG][T_FRAG_PROF][T_FRAG_W_SIZE],
+                            rule[T_FRAG][T_FRAG_PROF].get(T_FRAG_W_SIZE, "-"),
                             rule[T_FRAG][T_FRAG_PROF][T_FRAG_FCN],
                             "",
                             rule[T_FRAG][T_FRAG_DIRECTION],
@@ -749,10 +1096,10 @@ class RuleManager:
                             txt = "Ack behavior: "+ rule[T_FRAG][T_FRAG_PROF][T_FRAG_ACK_BEHAVIOR]
                             print ("!{} {:<84}{}!".format(dir_c, txt, dir_c))
 
-                        print ("!{} Max Retry : {:4}   Timeout {:5} seconds {:42} {}!".format(
+                        print ("!{} Max Retry : {:4} {:58} {}!".format(
                             dir_c,
                             rule[T_FRAG][T_FRAG_PROF][T_FRAG_MAX_RETRY],
-                            rule[T_FRAG][T_FRAG_PROF][T_FRAG_TIMEOUT], "",
+                            "",
                             dir_c
                         ))
 
@@ -785,11 +1132,13 @@ class RuleManager:
                 if type(e['sid']) is str:
                     e['sid'] = int(e['sid'], 0)
             self._sid_info.append(sid_values["ietf-sid-file:sid-file"]['item'])
+            self._sid_files.append(name)
         elif "item" in sid_values:
             for e in sid_values["item"]:
                 if type(e['sid']) is str:
                     e['sid'] = int(e['sid'], 0)
             self._sid_info.append(sid_values['item'])
+            self._sid_files.append(name)
 
         else:
             raise ValueError("Not a valid SID file")
@@ -805,244 +1154,134 @@ class RuleManager:
         #print (name, "not found in SID files")
         return None 
 
-    def cbor_header (self, major, value):
-        if value < 23:
-            return struct.pack ('!B', (major | value))
-        elif value < 255:
-            return struct.pack ('!BB', (major | 24),  value)
-
-    def to_coreconf (self, deviceID="None"):
-        """
-        Dump the rules in CORECONF format the rules inside the rule manager for a specific device.
-        """
-
-        def dictify_cbor (val, ref_id):
-            cbor_data = b''
-            if type(val) != list:
-                val = [val]
-
-            tv_array = b''
-            for i in range(len(val)):
-
-                if type(val[i]) == int:
-                    x = val[i]
-                    r = b''
-                    while x != 0:
-                        r = struct.pack('!B', x&0xFF) + r
-                        x >>= 8
-                elif type(val[i]) == bytes:
-                    r = val[i]
-
-                tv_array += b'\xA2' + \
-                    cbor.dumps(self.sid_search_for(name=ref_id+"/index", space="data") - self.sid_search_for(name=ref_id, space="data")) + \
-                    cbor.dumps(i)
-
-                tv_array +=  \
-                    cbor.dumps(self.sid_search_for(name=ref_id+"/value", space="data") - self.sid_search_for(name=ref_id, space="data")) + \
-                    cbor.dumps(r)
-
-
-            tv_array = self.cbor_header(0b100_00000, len(val)) + tv_array
-            return tv_array
- 
-        module_sid = self.sid_search_for(name="/ietf-schc:schc", space="data")
-        rule_sid = self.sid_search_for(name="/ietf-schc:schc/rule", space="data")
-
-
+    def to_coreconf(self, deviceID="None"):
+        """Encode a complete identifier-keyed tree with pycoreconf."""
+        if not self._sid_files:
+            raise ValueError("No SID file loaded; call add_sid_file first")
+        from pycoreconf import CORECONFModel
+        rules = []
         for dev in self._ctxt:
-            #print ("*"*40)
-            #print ("Device:", dev["DeviceID"])
+            rules.extend(self._rule_tree(r) for r in dev["SoR"])
+        tree = {"ietf-schc:schc": {"rule": rules}}
+        if self._management_context is not None:
+            tree["ietf-schc:context"] = self._management_context
+        try:
+            return CORECONFModel(self._sid_files).encode(tree)
+        except KeyError as exc:
+            raise ValueError("SID/model is missing required identifier {}".format(exc)) from exc
 
-            rule_count = 0
-            full_rules = b''
-            for rule in dev["SoR"]:
-                rule_count += 1
-                if T_COMP in rule:
-                    entry_sid = self.sid_search_for(name="/ietf-schc:schc/rule/entry", space="data")
+    def _identity(self, name):
+        identifier = YANG_ID.get(name, name)
+        if self.sid_search_for(identifier, "identity") is None:
+            raise ValueError("SID/model has no identity {!r}".format(identifier))
+        return YANG_ID["module"] + ":" + identifier
 
-                    nb_entry = 0
-                    rule_content = b''
-                    entry_index = 0
+    def _rule_tree(self, rule):
+        result = {"rule-id-value": rule[T_RULEID],
+                  "rule-id-length": rule[T_RULEIDLENGTH],
+                  "rule-nature": self._identity("nature-" + rule.get(T_RULE_NATURE, "compression"))}
+        if T_COMP in rule:
+            indexes = self._entry_indexes(rule[T_COMP])
+            available_indexes = set(indexes)
+            for entry in rule[T_COMP]:
+                if ("FieldLengthValue" in entry and
+                        entry["FieldLengthValue"] not in available_indexes):
+                    raise ValueError(
+                        "field-length-value {} does not name an entry index present in the rule".format(
+                            entry["FieldLengthValue"]
+                        )
+                    )
+            result["entry-universal"] = [self._entry_tree(e, i)
+                                         for e, i in zip(rule[T_COMP], indexes)]
+        elif T_FRAG in rule:
+            frag, profile = rule[T_FRAG], rule[T_FRAG][T_FRAG_PROF]
+            result.update({"direction": self._identity(frag[T_FRAG_DIRECTION]),
+                           "fragmentation-mode": self._identity(frag[T_FRAG_MODE]),
+                           "rcs-algorithm": self._identity(profile[T_FRAG_MIC]),
+                           "dtag-size": profile[T_FRAG_DTAG_SIZE],
+                           "fcn-size": profile[T_FRAG_FCN]})
+            optional = ((T_FRAG_W_SIZE, "w-size"), (T_FRAG_WINDOW_SIZE, "window-size"),
+                        (T_FRAG_L2WORDSIZE, "l2-word-size"), (T_FRAG_TILE, "tile-size"),
+                        (T_FRAG_MAX_RETRY, "max-ack-requests"),
+                        (T_MAX_INTER_FRAME, "max-interleaved-frames"),
+                        (T_MAX_PACKET_SIZE, "maximum-packet-size"))
+            for source, target in optional:
+                if source in profile and profile[source] is not None:
+                    result[target] = profile[source]
+            if T_FRAG_LAST_TILE_IN_ALL1 in profile:
+                result["tile-in-all-1"] = self._identity(profile[T_FRAG_LAST_TILE_IN_ALL1])
+            if T_FRAG_ACK_BEHAVIOR in profile:
+                ack_id = {T_FRAG_AFTER_ALL1: "ack-behavior-after-all-1",
+                          T_FRAG_AFTER_ALL0: "ack-behavior-after-all-0",
+                          T_FRAG_AFTER_ANY: "ack-behavior-by-layer2"}.get(
+                              profile[T_FRAG_ACK_BEHAVIOR])
+                if ack_id is None:
+                    raise ValueError("Unknown fragmentation ack behavior {!r}".format(
+                        profile[T_FRAG_ACK_BEHAVIOR]))
+                result["ack-behavior"] = self._identity(ack_id)
+            if "BitmapFormat" in profile:
+                result["bitmap-format"] = self._identity(profile["BitmapFormat"])
+            if "LastBitmapCompression" in profile:
+                result["last-bitmap-compression"] = profile["LastBitmapCompression"]
+            for source, target in (("InactivityTimer", "inactivity-timer"),
+                                   ("RetransmissionTimer", "retransmission-timer")):
+                if source in profile:
+                    result[target] = profile[source]
+        elif T_NO_COMP in rule:
+            return result
+        return result
 
-                    for e in rule[T_COMP]:
-                        nb_elm = 0
-                        nb_entry += 1
+    def _entry_indexes(self, entries):
+        """Return output indexes while retaining the source entry order."""
+        if len(entries) > 65536:
+            raise ValueError("EntryIndex supports at most 65536 entries")
+        explicit = [e.get("EntryIndex") for e in entries]
+        if not any(i is not None for i in explicit):
+            return list(range(len(entries)))
+        if any(i is None for i in explicit):
+            raise ValueError("EntryIndex must be supplied uniquely for every entry")
+        for index in explicit:
+            if type(index) is not int or not 0 <= index <= 65535:
+                raise ValueError("EntryIndex must be a unique uint16 (0..65535)")
+        if len(set(explicit)) != len(explicit):
+            raise ValueError("EntryIndex must be a unique uint16 (0..65535)")
+        if explicit != list(range(len(entries))):
+            raise ValueError("EntryIndex must match the zero-based entry order")
+        return explicit
 
+    def _entry_tree(self, entry, index):
+        fid = entry[T_FID]
+        result = {"entry-index": index,
+                  "field-length": self._field_length_tree(entry[T_FL]),
+                  "field-position": entry[T_FP],
+                  "direction-indicator": self._identity(entry[T_DI]),
+                  "matching-operator": self._identity(entry[T_MO]),
+                  "comp-decomp-action": self._identity(entry[T_CDA])}
+        if "FieldLengthValue" in entry:
+            result["field-length-value"] = entry["FieldLengthValue"]
+        option = re.match(r"COAP\.OPTION\((\d+)\)$", fid)
+        if option:
+            result["space-id"] = self._identity("space-id-coap")
+            result["universal-value"] = int(option.group(1))
+        elif fid in COAP_OPTION_NUMBERS:
+            result["space-id"] = self._identity("space-id-coap")
+            result["universal-value"] = COAP_OPTION_NUMBERS[fid]
+        else:
+            if fid not in YANG_ID:
+                raise ValueError("No YANG identity mapping for FID {!r}".format(fid))
+            result["field-id"] = self._identity(fid)
+        if T_MO_VAL in entry:
+            values = entry[T_MO_VAL] if isinstance(entry[T_MO_VAL], list) else [entry[T_MO_VAL]]
+            result["matching-operator-value"] = self._values_tree(values)
+        if T_TV in entry and entry[T_TV] is not None:
+            values = entry[T_TV] if isinstance(entry[T_TV], list) else [entry[T_TV]]
+            result["target-value"] = self._values_tree(values)
+        return result
 
-                        entry_cbor = \
-                            cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/entry-index", space="data") - entry_sid) + \
-                            cbor.dumps(entry_index)
-                        
-                        entry_index += 1
-                        nb_elm += 1
+    def _field_length_tree(self, value):
+        return value if isinstance(value, int) else self._identity(value)
 
-                        is_coap_option = False
-                        option_id = None
-                        if e[T_FID].find("COAP.OPTION") == 0:
-                            is_coap_option = True
-                            option_id = int(re.search(r'\((\d+)\)', e[T_FID]).group(1))
-                        elif e[T_FID] in COAP_OPTION_NUMBERS:
-                            is_coap_option = True
-                            option_id = COAP_OPTION_NUMBERS[e[T_FID]]
-
-                        if is_coap_option:
-                            space_id = self.sid_search_for(name="space-id-coap", space="identity") 
-                            entry_cbor += \
-                                cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/space-id", space="data") - entry_sid) + \
-                                cbor.dumps(space_id) +\
-                                cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/universal-value", space="data") - entry_sid) + \
-                                cbor.dumps(option_id)
-                            nb_elm += 2
-                        else: # Field ID
-                            field_id = self.sid_search_for(name=YANG_ID[e[T_FID]], space="identity")
-                            entry_cbor += \
-                                cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-id", space="data") - entry_sid) + \
-                                cbor.dumps(field_id) 
-                            nb_elm += 1
-
-
-                        l=e[T_FL]
-                        if type(l) == int:
-                            entry_cbor += \
-                                cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
-                                cbor.dumps(l)
-                        elif type(l) == str:
-                            if l.find("length-byte") == 0:
-
-                                entry_cbor += \
-                                    cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
-                                    struct.pack("!BB", 0xD8, 45) + \
-                                    cbor.dumps(self.sid_search_for(name="fl-length-bytes", space="identity")) 
-
-                                # add option
-                                match = re.search(r"\((\d+)\)", l)
-                                entry_cbor += \
-                                    cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length-value", space="data") - entry_sid) + \
-                                    cbor.dumps(int(match.group(1))) 
-                                nb_elm += 1
-
-                            else: # var and tkl
-                                entry_cbor += \
-                                    cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-length", space="data") - entry_sid) + \
-                                    struct.pack("!BB", 0xD8, 45) + \
-                                    cbor.dumps(self.sid_search_for(name=YANG_ID[l], space="identity")) 
-
-                            #raise ValueError("Field ID not defined")
-                        else:
-                            raise ValueError("unknown field length value")
-                        
-                        nb_elm += 1
-
-                        entry_cbor += \
-                            cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/field-position", space="data") - entry_sid) + \
-                            struct.pack('!B', e[T_FP])
-                        nb_elm += 1
-
-                        entry_cbor += \
-                            cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/direction-indicator", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_DI]], space="identity")) 
-                        nb_elm += 1
-
-                        entry_cbor += \
-                            cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/matching-operator", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_MO]], space="identity")) 
-                        nb_elm += 1
-
-                        if T_MO_VAL in e:
-                            mo_val_cbor = dictify_cbor(e[T_MO_VAL], "/ietf-schc:schc/rule/entry/matching-operator-value")
-                            entry_cbor += \
-                                cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/matching-operator-value", space="data") - entry_sid) + \
-                                mo_val_cbor
-                            nb_elm += 1
-
-                        entry_cbor += \
-                            cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/comp-decomp-action", space="data") - entry_sid) + \
-                            cbor.dumps(self.sid_search_for(name=YANG_ID[e[T_CDA]], space="identity")) 
-                        nb_elm += 1
-
-                        if T_TV in e and e[T_TV] != None:
-                            tv_cbor = dictify_cbor(e[T_TV], "/ietf-schc:schc/rule/entry/target-value")
-
-                            entry_cbor += \
-                            cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry/target-value", space="data") - entry_sid) + \
-                            tv_cbor
-                            nb_elm += 1
-
-                        entry_cbor = self.cbor_header (0b101_00000, nb_elm) + entry_cbor # header MAP and size
-
-                        rule_content += entry_cbor
-
-                    rule_content = b'\xA4' + \
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/entry", space="data") - rule_sid) + \
-                        self.cbor_header(0b100_00000, nb_entry) + rule_content + \
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-value", space="data") - rule_sid) +\
-                        cbor.dumps(rule[T_RULEID]) +\
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-length", space="data") - rule_sid) +\
-                        cbor.dumps(rule[T_RULEIDLENGTH]) +\
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-nature", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name= "nature-compression", space="identity")) 
-                    
-                elif T_FRAG in rule:
-                    nb_elm = 3
-                    rule_content = \
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-value", space="data") - rule_sid) +\
-                        cbor.dumps(rule[T_RULEID]) +\
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-length", space="data") - rule_sid) +\
-                        cbor.dumps(rule[T_RULEIDLENGTH]) +\
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-nature", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name= "nature-fragmentation", space="identity")) 
-
-                    rule_content += \
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/direction", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name=YANG_ID[rule[T_FRAG][T_FRAG_DIRECTION]], space="identity")) 
-                    nb_elm += 1
- 
-                    rule_content += \
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rcs-algorithm", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name=YANG_ID[rule[T_FRAG][T_FRAG_PROF][T_FRAG_MIC]], space="identity")) 
-                    nb_elm += 1
-
-                    rule_content += \
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/dtag-size", space="data") - rule_sid) +\
-                        cbor.dumps(rule[T_FRAG][T_FRAG_PROF][T_FRAG_DTAG_SIZE])
-                    nb_elm += 1
-
-                    if rule[T_FRAG][T_FRAG_MODE] in [T_FRAG_ACK_ALWAYS, T_FRAG_ACK_ON_ERROR]:
-                        rule_content += \
-                            cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/w-size", space="data") - rule_sid) +\
-                            cbor.dumps(rule[T_FRAG][T_FRAG_PROF][T_FRAG_W_SIZE])
-                        nb_elm += 1
-
-                    rule_content += \
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/fcn-size", space="data") - rule_sid) +\
-                        cbor.dumps(rule[T_FRAG][T_FRAG_PROF][T_FRAG_FCN])
-                    nb_elm += 1
-
-                    rule_content += \
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/fragmentation-mode", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name= YANG_ID[rule[T_FRAG][T_FRAG_MODE]], space="identity")) 
-                    nb_elm += 1
-                    
-                    rule_content = self.cbor_header(0b101_00000, nb_elm) + rule_content
-
-                elif T_NO_COMP in rule:
-                    rule_content = rule_content = self.cbor_header(0b101_00000, 3) +\
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-value", space="data") - rule_sid) +\
-                        cbor.dumps(rule[T_RULEID]) +\
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-length", space="data") - rule_sid) +\
-                        cbor.dumps(rule[T_RULEIDLENGTH]) +\
-                        cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-nature", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name= "nature-no-compression", space="identity")) 
-                else:
-                    raise ValueError("unkwon rule")
-
-
-                full_rules += rule_content        
-            
-        coreconf = b'\xA1' + cbor.dumps(module_sid) + b'\xA1' + cbor.dumps(rule_sid - module_sid) 
-
-        array_header = self.cbor_header(0b100_00000, rule_count) # array
-
-        coreconf +=  array_header+full_rules
-        return coreconf
-        # end of CORECONF
+    def _values_tree(self, values):
+        return [{"index": i, "value": base64.b64encode(
+                    v if isinstance(v, bytes) else adapt_value(v)).decode()}
+                for i, v in enumerate(values)]
