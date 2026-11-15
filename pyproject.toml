@@ -20,3 +20,6 @@ rule2sor = "rule2sor.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["rule2sor"]
+
+[tool.uv.sources]
+pycoreconf = { git = "https://github.com/ltn22/pycoreconf", branch = "hack-127" }

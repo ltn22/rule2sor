@@ -1,8 +1,8 @@
 # rule2sor
 
 Convert [OpenSCHC](https://github.com/ltn22/openschc) JSON rule files into
-`.sor` files (the Set of Rules serialized in CORECONF/CBOR, following the
-ietf-schc YANG data model).
+`.sor2` files (the Set of Rules serialized in CORECONF/CBOR, following the
+ietf-schc@2026-11-14 YANG data model).
 
 ## Usage with uvx
 
@@ -10,27 +10,31 @@ ietf-schc YANG data model).
 
 Or after installation (`pip install git+https://github.com/ltn22/rule2sor`):
 
-    rule2sor <rule-file.json> [-s <sid-file>]... [-o <output.sor>] [-q]
+    rule2sor <rule-file.json> [-s <sid-file>]... [-o <output.sor2>] [-q]
 
-By default the output file has the same name as the input with the `.sor`
-extension, and the SID file is the bundled `ietf-schc@2026-05-07.sid`.
+By default the output file has the same name as the input with the `.sor2`
+extension, and the SID file is the bundled `ietf-schc@2026-11-14.sid`.
 `-s` can be repeated to load several SID files (the bundled one is then not
 loaded unless given explicitly).
 With `-q` only the final message is printed.
 
-If you pass a `.sor` file instead of a JSON file, `rule2sor` will read and print
+If you pass a `.sor2` file instead of a JSON file, `rule2sor` will read and print
 its contents (CBOR hex, CBOR diagnostic notation, and decoded RESTCONF JSON)
 directly to the standard output:
 
-    rule2sor <file.sor> [-s <sid-file>]
+    rule2sor <file.sor2> [-s <sid-file>]
+
+Old `.sor` files, generated with the ietf-schc@2026-05-07 data model (`entry`
+list, fragmentation parameters directly in the rule), can still be displayed by
+giving the SID file of that model with `-s`.
 
 Example:
 
     rule2sor atmos41.json
-    # -> atmos41.sor
+    # -> atmos41.sor2
 
-    rule2sor atmos41.sor
-    # displays the content of atmos41.sor
+    rule2sor atmos41.sor2
+    # displays the content of atmos41.sor2
 
 ## What it does
 
@@ -46,7 +50,7 @@ This is an extraction of the minimal code from OpenSCHC:
     CORECONF/CBOR using the SID values.
 - `gen_parameters.py` — constants, `YANG_ID` mapping (simplified to a direct
   name-to-YANG-identifier mapping) and `adapt_value()`.
-- `ietf-schc@2026-05-07.sid` — default SID file.
+- `ietf-schc@2026-11-14.sid` — default SID file.
 
 ## JSON rule format
 
