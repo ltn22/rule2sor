@@ -192,7 +192,7 @@ YANG_ID = {
     T_COAP_CODE: "fid-coap-code",
     T_COAP_MID: "fid-coap-mid",
     T_OSCORE_FLAGS: "fid-coap-option-oscore-flags",
-    T_OSCORE_FLAGS_FLAGS: "fid-coap-option-oscore-flags-flags",
+    T_OSCORE_FLAGS_FLAGS: "fid-coap-option-oscore-flags-flagbits",
     T_OSCORE_FLAGS_N: "fid-coap-option-oscore-flags-n",
     T_OSCORE_KID: "fid-coap-option-oscore-kid",
     T_OSCORE_KIDCTX: "fid-coap-option-oscore-kidctx",
@@ -237,7 +237,7 @@ YANG_ID = {
     T_ICMPV6_IDENT: "fid-icmpv6-identifier",
     T_ICMPV6_SEQNO: "fid-icmpv6-sequence",
     T_ICMPV6_CKSUM: "fid-icmpv6-checksum",
-    T_ICMPV6_PAYLOAD: "fid-icmpv6-payload",
+    T_ICMPV6_PAYLOAD: "fid-payload",
     # for quentin extension
     T_O_DELTA: "fid-coap-delta-types",
     T_O_LENGTH: "fid-coap-length",

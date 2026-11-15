@@ -24,9 +24,25 @@ directly to the standard output:
 
     rule2sor <file.sor2> [-s <sid-file>]
 
+The data model of the file is detected: the file is checked against each bundled
+SID file (`ietf-schc@2026-05-07.sid`, `ietf-schc@2026-11-14.sid`), and the model is
+the one for which every key is a child of its parent node and every value matches
+the type of its leaf. The file is displayed with the SID file of this model.
+
 Old `.sor` files, generated with the ietf-schc@2026-05-07 data model (`entry`
-list, fragmentation parameters directly in the rule), can still be displayed by
-giving the SID file of that model with `-s`.
+list, fragmentation parameters directly in the rule), can be converted to the
+ietf-schc@2026-11-14 model. `rule2sor` asks before converting, or converts
+directly with `-c` (`-o` gives the output file, by default the same name with
+the `.sor2` extension):
+
+    rule2sor meteo.sor -c
+    # -> meteo.sor2
+
+The conversion renames `entry` to `entry-universal`, moves the fragmentation
+parameters in the `fragmentation` container, and replaces the removed identities
+(`fid-icmpv6-payload` by `fid-payload`, `fid-coap-option-oscore-flags-flags` by
+`fid-coap-option-oscore-flags-flagbits`). The nodes without equivalent in the new
+model (`bitmap-format`, `last-bitmap-compression`) are dropped with a warning.
 
 Example:
 

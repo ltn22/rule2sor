@@ -21,13 +21,75 @@ from cbor_diag import cbor2diag
 from pycoreconf import CORECONFModel
 
 from .gen_rulemanager import RuleManager
+from .sor_convert import detect, convert
 
 DEFAULT_SID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "ietf-schc@2026-11-14.sid")
 
+def dump(ycbor, sid_files):
+    print("CBOR (hex):", binascii.hexlify(ycbor).decode())
+    print("\nCBOR diagnostic notation:")
+    print(cbor2diag(ycbor))
+    print("\nRESTCONF JSON:")
+    model = CORECONFModel(sid_files)
+    print(json.dumps(model.decode(ycbor, as_rfc7951=True), indent=2))
+
+def show_sor(args, user_sid):
+    """Display a .sor/.sor2 file. The data model is detected by checking the file
+    against each bundled SID file; a file of an older model can be converted."""
+    if not os.path.exists(args.rule_file):
+        print(f"Error: file not found: {args.rule_file}", file=sys.stderr)
+        return 1
+    with open(args.rule_file, "rb") as f:
+        ycbor = f.read()
+
+    results = detect(ycbor)
+    best, errors, _ = results[0]
+    if errors:
+        print("Warning: data model not recognized, closest is {} ({} inconsistencies):".format(
+            best.name, len(errors)), file=sys.stderr)
+        for e in errors[:5]:
+            print("  " + e, file=sys.stderr)
+        if not args.quiet:
+            dump(ycbor, args.sid)
+        return 1
+
+    print("Data model: {} (detected)".format(best.name))
+    if not args.quiet:
+        dump(ycbor, user_sid or [best.path])
+
+    newest = max((r[0] for r in results), key=lambda s: s.revision)
+    if best.revision >= newest.revision:
+        return 0
+
+    output = args.output
+    if output is None:
+        output = os.path.splitext(args.rule_file)[0] + ".sor2"
+    if not args.convert:
+        if not sys.stdin.isatty():
+            print("This file uses an older data model, use -c to convert it to {} ({}).".format(
+                newest.name, output))
+            return 0
+        try:
+            answer = input("This file uses an older data model. Convert it to {} in {}? [y/N] ".format(
+                newest.name, output))
+        except EOFError:
+            answer = ""
+        if answer.strip().lower() not in ("y", "yes", "o", "oui"):
+            return 0
+
+    new_cbor, warnings = convert(ycbor, best.path, newest.path)
+    for w in warnings:
+        print("Warning: " + w, file=sys.stderr)
+    with open(output, "wb") as f:
+        f.write(new_cbor)
+    print("{} written ({} bytes, {})".format(output, len(new_cbor), newest.name))
+    return 0
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert OpenSCHC JSON rules to a CORECONF/CBOR .sor2 file, or display a .sor2 file")
+        description="Convert OpenSCHC JSON rules to a CORECONF/CBOR .sor2 file, or display a .sor2 file\n"
+                    "(a .sor file of an older data model can be converted to .sor2)")
     parser.add_argument("rule_file", help="JSON file describing the set of rules, or .sor2/.sor file to display")
     parser.add_argument("-s", "--sid", action="append",
                         help="SID file, can be repeated (default: {})".format(DEFAULT_SID_FILE))
@@ -35,23 +97,15 @@ def main():
                         help="output .sor2 file (default: rule file with .sor2 extension)")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="do not print the rules nor the CBOR dump")
+    parser.add_argument("-c", "--convert", action="store_true",
+                        help="convert a .sor file of an older data model to .sor2 without asking")
     args = parser.parse_args()
+    user_sid = args.sid
     if args.sid is None:
         args.sid = [DEFAULT_SID_FILE]
 
     if args.rule_file.lower().endswith((".sor", ".sor2")):
-        if not os.path.exists(args.rule_file):
-            print(f"Error: file not found: {args.rule_file}", file=sys.stderr)
-            sys.exit(1)
-        with open(args.rule_file, "rb") as f:
-            ycbor = f.read()
-        print("CBOR (hex):", binascii.hexlify(ycbor).decode())
-        print("\nCBOR diagnostic notation:")
-        print(cbor2diag(ycbor))
-        print("\nRESTCONF JSON:")
-        model = CORECONFModel(args.sid)
-        print(json.dumps(model.decode(ycbor, as_rfc7951=True), indent=2))
-        return
+        return show_sor(args, user_sid)
 
     output = args.output
     if output is None:
@@ -68,12 +122,7 @@ def main():
 
     ycbor = rm.to_coreconf()
     if not args.quiet:
-        print(binascii.hexlify(ycbor))
-        print("\nCBOR diagnostic notation:")
-        print(cbor2diag(ycbor))
-        print("\nRESTCONF JSON:")
-        model = CORECONFModel(args.sid)
-        print(json.dumps(model.decode(ycbor, as_rfc7951=True), indent=2))
+        dump(ycbor, args.sid)
 
     with open(output, "wb") as f:
         f.write(ycbor)
