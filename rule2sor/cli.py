@@ -51,7 +51,7 @@ def show_sor(args, user_sid):
             best.name, len(errors)), file=sys.stderr)
         for e in errors[:5]:
             print("  " + e, file=sys.stderr)
-        if args.verbose:
+        if args.full:
             dump(ycbor, args.sid)
         return 1
 
@@ -66,7 +66,7 @@ def show_sor(args, user_sid):
         model = CORECONFModel([shown_sid])
         print_rules(model.decode(shown, as_rfc7951=True),
                     os.path.splitext(os.path.basename(args.rule_file))[0])
-    if args.verbose:
+    if args.full:
         dump(ycbor, user_sid or [best.path])
 
     if best.revision >= newest.revision:
@@ -106,10 +106,10 @@ def main():
     parser.add_argument("-o", "--output",
                         help="output .sor2 file (default: rule file with .sor2 extension)")
     parser.add_argument("-q", "--quiet", action="store_true",
-                        help="do not print the rules nor the CBOR dump")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="display a .sor2/.sor file with its CBOR dump and RESTCONF JSON, "
-                             "after the tables of rules")
+                        help="do not print the rules")
+    parser.add_argument("--full", "-v", "--verbose", dest="full", action="store_true",
+                        help="also print the CORECONF (CBOR hex and diagnostic notation) and the "
+                             "RESTCONF JSON of the rules, after the tables")
     parser.add_argument("-c", "--convert", action="store_true",
                         help="convert a .sor file of an older data model to .sor2 without asking")
     args = parser.parse_args()
@@ -134,7 +134,7 @@ def main():
         rm.Print()
 
     ycbor = rm.to_coreconf()
-    if not args.quiet:
+    if args.full:
         dump(ycbor, args.sid)
 
     with open(output, "wb") as f:

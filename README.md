@@ -16,15 +16,16 @@ By default the output file has the same name as the input with the `.sor2`
 extension, and the SID file is the bundled `ietf-schc@2026-11-16.sid`.
 `-s` can be repeated to load several SID files (the bundled one is then not
 loaded unless given explicitly).
-With `-q` only the final message is printed.
+The rules are displayed as tables; `--full` also prints the CORECONF (CBOR hex and
+diagnostic notation) and the RESTCONF JSON, and with `-q` only the final message is printed.
 
 If you pass a `.sor2` file instead of a JSON file, `rule2sor` displays its rules
 as the same compact ASCII tables as when the rules are read from a JSON file
 (RuleID, action with its arguments, one line per field, fragmentation parameters).
-With `-v` the CBOR hex, the CBOR diagnostic notation and the decoded RESTCONF JSON
-are printed after the tables, with `-q` only the detected data model is printed:
+With `--full` the CORECONF (CBOR hex and diagnostic notation) and the decoded RESTCONF
+JSON are printed after the tables, with `-q` only the detected data model is printed:
 
-    rule2sor <file.sor2> [-s <sid-file>] [-v] [-q]
+    rule2sor <file.sor2> [-s <sid-file>] [--full] [-q]
 
 The `.sor2` file only stores the fragmentation parameters needed by the rules (mode,
 direction, sizes, RCS algorithm): the tile size, the ACK behavior, the maximum
