@@ -24,7 +24,7 @@ from .gen_rulemanager import RuleManager
 from .sor_convert import detect, convert
 
 DEFAULT_SID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "ietf-schc@2026-11-14.sid")
+                                "ietf-schc@2026-11-16.sid")
 
 def dump(ycbor, sid_files):
     print("CBOR (hex):", binascii.hexlify(ycbor).decode())

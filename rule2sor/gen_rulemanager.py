@@ -107,7 +107,11 @@ the Field Descriptor matches the case where the field is not present in the head
    * *rev-compressed-sent*: the value sent in the residue is taken from the reverse-direction rule.
 
 * **CDAa**: represents the argument of the CDA. Currently, no CDAa is defined.
-* **Action**: experimental, unvalidated keyword carried through as-is if present; do not rely on it yet.
+* **Action**: optional, at the rule level. Action applied to a packet matching the compression rule
+  (ietf-schc@2026-11-14 'action' leaf): an action-* identity without its prefix, optionally followed by
+  its arguments, stored in the 'action-value' list, e.g. "proxy-ping(180)". An integer argument is
+  encoded as for a TV (minimal big-endian bytes), any other argument as UTF-8 bytes. When absent,
+  the default action is forward (RFC 8724 behavior).
 
 For example, with the YANG syntax::
 
@@ -633,6 +637,37 @@ class RuleManager:
             raise ValueError("field length argument too large in {}".format(fl))
         return identity, arg
 
+    def _action (self, action):
+        """
+        Resolve a rule Action into (identity, arguments). The action is an action-*
+        identity, with or without its prefix, optionally followed by a comma separated
+        list of arguments, e.g. proxy-ping(180). An integer argument (decimal or 0x...)
+        is kept as an int, any other argument as UTF-8 bytes.
+        """
+        if type(action) is not str:
+            raise ValueError("invalid action {}".format(action))
+
+        match = re.fullmatch(r"\s*([A-Za-z0-9_-]+)\s*(?:\((.*)\))?\s*", action)
+        if match is None:
+            raise ValueError("invalid action syntax {}".format(action))
+
+        name = match.group(1).lower()
+        identity = name if name.startswith("action-") else "action-" + name
+        if self._identities is not None and identity not in self._identities:
+            raise ValueError("unknown action {}: identity {} not found in SID files".format(action, identity))
+
+        args = []
+        if match.group(2) is not None and match.group(2).strip() != "":
+            for arg in match.group(2).split(","):
+                arg = arg.strip()
+                if arg == "":
+                    raise ValueError("empty argument in action {}".format(action))
+                try:
+                    args.append(int(arg, 0))
+                except ValueError:
+                    args.append(arg.encode("utf-8"))
+        return identity, args
+
     def _check_field_positions (self, arule):
         """
         For each direction, the n-th occurrence of a FID in the rule must have FP n:
@@ -667,9 +702,13 @@ class RuleManager:
         arule[T_RULEIDLENGTH] = nrule[T_RULEIDLENGTH]
 
         if T_ACTION in nrule:
-             print ("Warning: using experimental Action")
-             arule[T_ACTION] = nrule[T_ACTION]
-
+            try:
+                arule[T_ACTION], action_args = self._action(nrule[T_ACTION])
+            except ValueError as err:
+                raise ValueError("Action in rule {}/{}: {}".format(
+                    arule[T_RULEID], arule[T_RULEIDLENGTH], err)) from None
+            if action_args:
+                arule[T_ACTION_VAL] = action_args
 
 
         arule[T_COMP] = []
@@ -803,6 +842,13 @@ class RuleManager:
                 print ("/" + "-"*25 + "\\")
                 txt = str(rule[T_RULEID])+"/"+ str(rule[T_RULEIDLENGTH])
                 print ("|Rule {:8}  {:10}|".format(txt, self.printBin(rule[T_RULEID], rule[T_RULEIDLENGTH])))
+
+                if T_COMP in rule and T_ACTION in rule:
+                    txt = self._short_name(rule[T_ACTION], "action-")
+                    if T_ACTION_VAL in rule:
+                        txt += "(" + ", ".join(str(v) if type(v) is int else v.decode("utf-8", "replace")
+                                               for v in rule[T_ACTION_VAL]) + ")"
+                    print ("|Action: {:<17}|".format(txt))
 
                 if T_COMP in rule:
                     print ("|" + "-"*22 + "+" + "-"*16 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"\\")
@@ -1113,7 +1159,20 @@ class RuleManager:
 
                         rule_content += entry_cbor
 
-                    rule_content = b'\xA4' + \
+                    nb_rule_elm = 4
+                    action_cbor = b''
+                    if T_ACTION in rule:
+                        action_cbor += \
+                            cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/action", space="data") - rule_sid) + \
+                            cbor.dumps(self.sid_search_for(name=rule[T_ACTION], space="identity"))
+                        nb_rule_elm += 1
+                        if T_ACTION_VAL in rule:
+                            action_cbor += \
+                                cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/action-value", space="data") - rule_sid) + \
+                                dictify_cbor(rule[T_ACTION_VAL], "/ietf-schc:schc/rule/action-value")
+                            nb_rule_elm += 1
+
+                    rule_content = self.cbor_header(0b101_00000, nb_rule_elm) + \
                         cbor.dumps(self.sid_search_for(name=ENTRY, space="data") - rule_sid) + \
                         self.cbor_header(0b100_00000, nb_entry) + rule_content + \
                         cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-value", space="data") - rule_sid) +\
@@ -1121,8 +1180,9 @@ class RuleManager:
                         cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-length", space="data") - rule_sid) +\
                         cbor.dumps(rule[T_RULEIDLENGTH]) +\
                         cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-nature", space="data") - rule_sid) +\
-                        cbor.dumps(self.sid_search_for(name= "nature-compression", space="identity")) 
-                    
+                        cbor.dumps(self.sid_search_for(name= "nature-compression", space="identity")) + \
+                        action_cbor
+
                 elif T_FRAG in rule:
                     frag_sid = self.sid_search_for(name=FRAG, space="data")
                     nb_elm = 0

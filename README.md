@@ -13,7 +13,7 @@ Or after installation (`pip install git+https://github.com/ltn22/rule2sor`):
     rule2sor <rule-file.json> [-s <sid-file>]... [-o <output.sor2>] [-q]
 
 By default the output file has the same name as the input with the `.sor2`
-extension, and the SID file is the bundled `ietf-schc@2026-11-14.sid`.
+extension, and the SID file is the bundled `ietf-schc@2026-11-16.sid`.
 `-s` can be repeated to load several SID files (the bundled one is then not
 loaded unless given explicitly).
 With `-q` only the final message is printed.
@@ -25,13 +25,13 @@ directly to the standard output:
     rule2sor <file.sor2> [-s <sid-file>]
 
 The data model of the file is detected: the file is checked against each bundled
-SID file (`ietf-schc@2026-05-07.sid`, `ietf-schc@2026-11-14.sid`), and the model is
+SID file (`ietf-schc@2026-05-07.sid`, `ietf-schc@2026-11-14.sid`, `ietf-schc@2026-11-16.sid`), and the model is
 the one for which every key is a child of its parent node and every value matches
 the type of its leaf. The file is displayed with the SID file of this model.
 
 Old `.sor` files, generated with the ietf-schc@2026-05-07 data model (`entry`
 list, fragmentation parameters directly in the rule), can be converted to the
-ietf-schc@2026-11-14 model. `rule2sor` asks before converting, or converts
+ietf-schc@2026-11-16 model. `rule2sor` asks before converting, or converts
 directly with `-c` (`-o` gives the output file, by default the same name with
 the `.sor2` extension):
 
@@ -66,7 +66,7 @@ This is an extraction of the minimal code from OpenSCHC:
     CORECONF/CBOR using the SID values.
 - `gen_parameters.py` — constants, `YANG_ID` mapping (simplified to a direct
   name-to-YANG-identifier mapping) and `adapt_value()`.
-- `ietf-schc@2026-11-14.sid` — default SID file.
+- `ietf-schc@2026-11-16.sid` — default SID file (adds the `action-management` identity to 2026-11-14).
 
 ## JSON rule format
 
