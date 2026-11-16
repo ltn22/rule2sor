@@ -122,6 +122,8 @@ def internal_rules(decoded):
         else:
             entries = rule.get("entry-universal", [])
             internal[T_COMP] = [_entry(e) for e in entries]
+            if nature == "nature-management":
+                internal[T_NATURE] = nature
             if "action" in rule:
                 internal[T_ACTION] = _name(rule["action"])
                 if "action-value" in rule:

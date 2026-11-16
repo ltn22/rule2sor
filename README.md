@@ -86,3 +86,12 @@ without their prefix (`ipv6-version`, `length-bytes(16)`, `down`, `equal`,
 `compute`...), looked up in the SID files, or with the old OpenSCHC names
 (`IPV6.VER`, `length-byte(16)`, `DW`, `compute-length`...). Universal options
 are written `coap.option(11)` or `UO(coap, 11)`. See `meteo.json` for an example.
+
+A rule is described with one of the keys `Compression`, `Management`, `Fragmentation` or
+`NoCompression`. `Management` has the same list of Field Descriptions as `Compression`, for
+the rules of the management stack (ietf-schc-mgmt): the rule is written with the nature
+`nature-management` instead of `nature-compression` in the `.sor2` file, and the tables show
+`Nature: management`. `Action` can be given on the rules which have a list of Field
+Descriptions.
+
+    {"RuleIDValue": 0, "RuleIDLength": 5, "Management": [ {"FID": "ipv6-version", ...}, ... ]}

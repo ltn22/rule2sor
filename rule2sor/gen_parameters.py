@@ -139,6 +139,8 @@ T_ACTION = "Action"
 T_ACTION_VAL = "Action.VAL"      # arguments of the action, e.g. proxy-ping(180)
 
 T_COMP = "Compression"
+T_MGMT = "Management"      # a management rule: same entries as a compression rule, nature-management
+T_NATURE = "Nature"         # nature identity of a rule built from a JSON key other than Compression
 T_NO_COMP = "NoCompression"
 T_FRAG = "Fragmentation"
 T_FRAG_MODE = "FRMode"
