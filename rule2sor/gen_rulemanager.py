@@ -289,6 +289,8 @@ The rule-lookup and fragmentation/reassembly logic of the original OpenSCHC Rule
 for this extraction and is not implemented here.
 """
 
+import contextlib
+import io
 import json
 import struct
 import re
@@ -837,6 +839,152 @@ class RuleManager:
             return v[len(prefix):]
         return v
 
+    def _print_rule(self, rule):
+        """
+        Print a rule as a table (the body of the loop of Print)
+        """
+        print ("/" + "-"*25 + "\\")
+        txt = str(rule[T_RULEID])+"/"+ str(rule[T_RULEIDLENGTH])
+        print ("|Rule {:8}  {:10}|".format(txt, self.printBin(rule[T_RULEID], rule[T_RULEIDLENGTH])))
+
+        if T_NATURE in rule:
+            print ("|Nature: {:<17}|".format(self._short_name(rule[T_NATURE], "nature-")))
+
+        if T_COMP in rule and T_ACTION in rule:
+            txt = self._short_name(rule[T_ACTION], "action-")
+            if T_ACTION_VAL in rule:
+                txt += "(" + ", ".join(str(v) if type(v) is int else v.decode("utf-8", "replace")
+                                       for v in rule[T_ACTION_VAL]) + ")"
+            print ("|Action: {:<17}|".format(txt))
+
+        if T_COMP in rule:
+            print ("|" + "-"*22 + "+" + "-"*16 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"\\")
+            for e in rule[T_COMP]:
+                # identities are displayed without their prefix
+                fid = self._short_name(e[T_FID], "fid-")
+                fl = self._short_name(e[T_FL], "fl-")
+                if T_FL_VAL in e:
+                    fl = "{}({})".format(fl, e[T_FL_VAL])
+                di = {YANG_ID[T_DIR_UP]: T_DIR_UP, YANG_ID[T_DIR_DW]: T_DIR_DW, YANG_ID[T_DIR_BI]: T_DIR_BI}.get(e[T_DI], e[T_DI])
+
+                msg2 = None
+                if len(fid) < 23:
+                    print ("|{:<22s}|{:>16}|{:2}|{:2}|".format(fid, fl, e[T_FP], di), end='')
+                else: # FID is too large, write it on 2 lines
+                    msg1 = fid[:22]
+                    msg2 = fid[22:]
+                    print ("|{:<22s}|{:>16}|{:2}|{:2}|".format(msg1, fl, e[T_FP], di), end="")
+
+                if 'TV' in e:
+                    if type(e[T_TV]) is list:
+                        self._smart_print(e[T_TV][0])
+                    elif type(e[T_TV]) is dict:
+                        self._smart_print(list(e[T_TV])[0]+'('+list(e[T_TV].values())[0]+')' )
+                    else:
+                        self._smart_print(e[T_TV])
+                if not T_TV in e or e[T_TV] == None:
+                    print ("-"*30, end="")
+
+                txt = self._short_name(e[T_MO], "mo-")
+                if T_MO_VAL in e:
+                    txt = txt+ '(' + str(e[T_MO_VAL])+')'
+
+                print ("|{:13}|{:16}|".format(txt, self._short_name(e[T_CDA], "cda-")))
+
+                if (T_TV in e) and (type (e[T_TV]) is list):
+                    for i in range (1, len(e[T_TV])):
+                        print (":{:^22s}:{:^16}:{:^2}:{:^2}:".format(".", ".", ".","."), end='')
+                        self._smart_print(e[T_TV][i])
+                        print (":{:^13}:{:^16}:".format(".", "."))
+
+                if msg2 != None: # FID is too large, wrote it on 2 lignes, this is the second line
+                    print ("|{:<22s}|{:>16}|{:2}|{:2}|{:30}|{:13}|{:16}|".format(msg2, "", "", "", "", "", "" ), )
+
+            print ("\\" + "-"*22 + "+" + "-"*16 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"/")
+        elif T_FRAG in rule:
+            # print (rule)
+            if rule[T_FRAG][T_FRAG_DIRECTION] == T_DIR_UP:
+                dir_c = "^"
+            else:
+                dir_c = "v"
+
+            print ("!" + "="*25 + "+" + "="*61 +"\\")
+            print ("!{} Fragmentation mode : {:<15} header dtag{:2} Window {:2} FCN {:2} {:13}{:2} {}!"
+                .format(
+                    dir_c,
+                    rule[T_FRAG][T_FRAG_MODE],
+                    rule[T_FRAG][T_FRAG_PROF][T_FRAG_DTAG_SIZE],
+                    rule[T_FRAG][T_FRAG_PROF][T_FRAG_W_SIZE],
+                    rule[T_FRAG][T_FRAG_PROF][T_FRAG_FCN],
+                    "",
+                    rule[T_FRAG][T_FRAG_DIRECTION],
+                    dir_c
+                ))
+
+            if T_FRAG_TILE in rule[T_FRAG][T_FRAG_PROF]:
+                txt = "Tile size: "+ str(rule[T_FRAG][T_FRAG_PROF][T_FRAG_TILE])
+            else:
+                txt = "No Tile size specified"
+            print ("!{} {:<84}{}!".format(dir_c, txt, dir_c))
+
+
+            print ("!{} RCS Algorithm: {:<69}{}!".format(dir_c,rule[T_FRAG][T_FRAG_PROF][T_FRAG_MIC], dir_c))
+
+            if rule[T_FRAG][T_FRAG_MODE] != T_FRAG_NO_ACK:
+                print ("!{0}{1}{0}!".format(dir_c, "-"*83))
+                if  rule[T_FRAG][T_FRAG_MODE] == T_FRAG_ACK_ON_ERROR:
+                    txt = "Ack behavior: "+ rule[T_FRAG][T_FRAG_PROF][T_FRAG_ACK_BEHAVIOR]
+                    print ("!{} {:<84}{}!".format(dir_c, txt, dir_c))
+
+                print ("!{} Max Retry : {:4}   Timeout {:5} seconds {:42} {}!".format(
+                    dir_c,
+                    rule[T_FRAG][T_FRAG_PROF][T_FRAG_MAX_RETRY],
+                    rule[T_FRAG][T_FRAG_PROF][T_FRAG_TIMEOUT], "",
+                    dir_c
+                ))
+
+            print ("\\" + "="*87 +"/")
+        elif T_NO_COMP in rule:
+            print ("+"+ "~"*25 + "+")
+            print ("|     NO COMPRESSION      |")
+            print ("\\"+ "~"*25 + "/")
+
+    @staticmethod
+    def _management_frame(text):
+        """
+        Redraw the frame of a rule printed by _print_rule, to show a management rule at
+        a glance: '#' for the corners and the sides and '=' for the horizontal lines,
+        instead of '/', '\\', '|' and '-'. The separators of the columns are kept.
+        """
+        out = []
+        for line in text.split("\n"):
+            if len(line) < 2:
+                out.append(line)
+            elif line[0] == "/" and line[-1] == "\\":          # top of the title
+                out.append("#" + line[1:-1].replace("-", "=") + "#")
+            elif line[0] == "\\" and line[-1] == "/":          # bottom of the table
+                out.append("#" + line[1:-1].replace("-", "=") + "#")
+            elif line[0] == "|" and line[-1] == "\\":          # top of the table
+                out.append("#" + line[1:-1].replace("-", "=") + "#")
+            elif line[0] in "|:" and line[-1] in "|:":         # title and rows
+                out.append("#" + line[1:-1] + "#")
+            else:
+                out.append(line)
+        return "\n".join(out)
+
+    def _print_rule_framed(self, rule):
+        """
+        Print a rule, with the frame of the management rules if its nature is management
+        """
+        if rule.get(T_NATURE) != "nature-management":
+            self._print_rule(rule)
+            return
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            self._print_rule(rule)
+        print(self._management_frame(buffer.getvalue().rstrip("\n")))
+
+
     def Print (self):
         """
         Print a context
@@ -846,111 +994,7 @@ class RuleManager:
             print ("Device:", dev["DeviceID"])
 
             for rule in dev["SoR"]:
-                print ("/" + "-"*25 + "\\")
-                txt = str(rule[T_RULEID])+"/"+ str(rule[T_RULEIDLENGTH])
-                print ("|Rule {:8}  {:10}|".format(txt, self.printBin(rule[T_RULEID], rule[T_RULEIDLENGTH])))
-
-                if T_NATURE in rule:
-                    print ("|Nature: {:<17}|".format(self._short_name(rule[T_NATURE], "nature-")))
-
-                if T_COMP in rule and T_ACTION in rule:
-                    txt = self._short_name(rule[T_ACTION], "action-")
-                    if T_ACTION_VAL in rule:
-                        txt += "(" + ", ".join(str(v) if type(v) is int else v.decode("utf-8", "replace")
-                                               for v in rule[T_ACTION_VAL]) + ")"
-                    print ("|Action: {:<17}|".format(txt))
-
-                if T_COMP in rule:
-                    print ("|" + "-"*22 + "+" + "-"*16 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"\\")
-                    for e in rule[T_COMP]:
-                        # identities are displayed without their prefix
-                        fid = self._short_name(e[T_FID], "fid-")
-                        fl = self._short_name(e[T_FL], "fl-")
-                        if T_FL_VAL in e:
-                            fl = "{}({})".format(fl, e[T_FL_VAL])
-                        di = {YANG_ID[T_DIR_UP]: T_DIR_UP, YANG_ID[T_DIR_DW]: T_DIR_DW, YANG_ID[T_DIR_BI]: T_DIR_BI}.get(e[T_DI], e[T_DI])
-
-                        msg2 = None
-                        if len(fid) < 23:
-                            print ("|{:<22s}|{:>16}|{:2}|{:2}|".format(fid, fl, e[T_FP], di), end='')
-                        else: # FID is too large, write it on 2 lines
-                            msg1 = fid[:22]
-                            msg2 = fid[22:]
-                            print ("|{:<22s}|{:>16}|{:2}|{:2}|".format(msg1, fl, e[T_FP], di), end="")
-
-                        if 'TV' in e:
-                            if type(e[T_TV]) is list:
-                                self._smart_print(e[T_TV][0])
-                            elif type(e[T_TV]) is dict:
-                                self._smart_print(list(e[T_TV])[0]+'('+list(e[T_TV].values())[0]+')' )
-                            else:
-                                self._smart_print(e[T_TV])
-                        if not T_TV in e or e[T_TV] == None:
-                            print ("-"*30, end="")
-
-                        txt = self._short_name(e[T_MO], "mo-")
-                        if T_MO_VAL in e:
-                            txt = txt+ '(' + str(e[T_MO_VAL])+')'
-
-                        print ("|{:13}|{:16}|".format(txt, self._short_name(e[T_CDA], "cda-")))
-
-                        if (T_TV in e) and (type (e[T_TV]) is list):
-                            for i in range (1, len(e[T_TV])):
-                                print (":{:^22s}:{:^16}:{:^2}:{:^2}:".format(".", ".", ".","."), end='')
-                                self._smart_print(e[T_TV][i])
-                                print (":{:^13}:{:^16}:".format(".", "."))
-
-                        if msg2 != None: # FID is too large, wrote it on 2 lignes, this is the second line
-                            print ("|{:<22s}|{:>16}|{:2}|{:2}|{:30}|{:13}|{:16}|".format(msg2, "", "", "", "", "", "" ), )
-
-                    print ("\\" + "-"*22 + "+" + "-"*16 + "+" + "-"*2 + "+" + "-"*2 + "+" + "-"*30 + "+" + "-"*13 + "+" + "-"*16 +"/")
-                elif T_FRAG in rule:
-                    # print (rule)
-                    if rule[T_FRAG][T_FRAG_DIRECTION] == T_DIR_UP:
-                        dir_c = "^"
-                    else:
-                        dir_c = "v"
-
-                    print ("!" + "="*25 + "+" + "="*61 +"\\")
-                    print ("!{} Fragmentation mode : {:<15} header dtag{:2} Window {:2} FCN {:2} {:13}{:2} {}!"
-                        .format(
-                            dir_c,
-                            rule[T_FRAG][T_FRAG_MODE],
-                            rule[T_FRAG][T_FRAG_PROF][T_FRAG_DTAG_SIZE],
-                            rule[T_FRAG][T_FRAG_PROF][T_FRAG_W_SIZE],
-                            rule[T_FRAG][T_FRAG_PROF][T_FRAG_FCN],
-                            "",
-                            rule[T_FRAG][T_FRAG_DIRECTION],
-                            dir_c
-                        ))
-
-                    if T_FRAG_TILE in rule[T_FRAG][T_FRAG_PROF]:
-                        txt = "Tile size: "+ str(rule[T_FRAG][T_FRAG_PROF][T_FRAG_TILE])
-                    else:
-                        txt = "No Tile size specified"
-                    print ("!{} {:<84}{}!".format(dir_c, txt, dir_c))
-
-
-                    print ("!{} RCS Algorithm: {:<69}{}!".format(dir_c,rule[T_FRAG][T_FRAG_PROF][T_FRAG_MIC], dir_c))
-
-                    if rule[T_FRAG][T_FRAG_MODE] != T_FRAG_NO_ACK:
-                        print ("!{0}{1}{0}!".format(dir_c, "-"*83))
-                        if  rule[T_FRAG][T_FRAG_MODE] == T_FRAG_ACK_ON_ERROR:
-                            txt = "Ack behavior: "+ rule[T_FRAG][T_FRAG_PROF][T_FRAG_ACK_BEHAVIOR]
-                            print ("!{} {:<84}{}!".format(dir_c, txt, dir_c))
-
-                        print ("!{} Max Retry : {:4}   Timeout {:5} seconds {:42} {}!".format(
-                            dir_c,
-                            rule[T_FRAG][T_FRAG_PROF][T_FRAG_MAX_RETRY],
-                            rule[T_FRAG][T_FRAG_PROF][T_FRAG_TIMEOUT], "",
-                            dir_c
-                        ))
-
-                    print ("\\" + "="*87 +"/")
-                elif T_NO_COMP in rule:
-                    print ("+"+ "~"*25 + "+")
-                    print ("|     NO COMPRESSION      |")
-                    print ("\\"+ "~"*25 + "/")
+                self._print_rule_framed(rule)
 
             if T_INDEXES in dev and len(dev[T_INDEXES]) > 0:
                 print ("INDEXES:")
