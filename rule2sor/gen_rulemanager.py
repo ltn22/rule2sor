@@ -924,7 +924,7 @@ class RuleManager:
                     print ("!{} RCS Algorithm: {:<69}{}!".format(dir_c,rule[T_FRAG][T_FRAG_PROF][T_FRAG_MIC], dir_c))
 
                     if rule[T_FRAG][T_FRAG_MODE] != T_FRAG_NO_ACK:
-                        print ("!{0}" + "-"*83 +"{0}!".format(dir_c))
+                        print ("!{0}{1}{0}!".format(dir_c, "-"*83))
                         if  rule[T_FRAG][T_FRAG_MODE] == T_FRAG_ACK_ON_ERROR:
                             txt = "Ack behavior: "+ rule[T_FRAG][T_FRAG_PROF][T_FRAG_ACK_BEHAVIOR]
                             print ("!{} {:<84}{}!".format(dir_c, txt, dir_c))

@@ -18,11 +18,18 @@ extension, and the SID file is the bundled `ietf-schc@2026-11-16.sid`.
 loaded unless given explicitly).
 With `-q` only the final message is printed.
 
-If you pass a `.sor2` file instead of a JSON file, `rule2sor` will read and print
-its contents (CBOR hex, CBOR diagnostic notation, and decoded RESTCONF JSON)
-directly to the standard output:
+If you pass a `.sor2` file instead of a JSON file, `rule2sor` displays its rules
+as the same compact ASCII tables as when the rules are read from a JSON file
+(RuleID, action with its arguments, one line per field, fragmentation parameters).
+With `-v` the CBOR hex, the CBOR diagnostic notation and the decoded RESTCONF JSON
+are printed after the tables, with `-q` only the detected data model is printed:
 
-    rule2sor <file.sor2> [-s <sid-file>]
+    rule2sor <file.sor2> [-s <sid-file>] [-v] [-q]
+
+The `.sor2` file only stores the fragmentation parameters needed by the rules (mode,
+direction, sizes, RCS algorithm): the tile size, the ACK behavior, the maximum
+number of retries and the timeout are displayed as absent (`-`) when they are not
+in the file.
 
 The data model of the file is detected: the file is checked against each bundled
 SID file (`ietf-schc@2026-05-07.sid`, `ietf-schc@2026-11-14.sid`, `ietf-schc@2026-11-16.sid`), and the model is

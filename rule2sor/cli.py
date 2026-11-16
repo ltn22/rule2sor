@@ -22,6 +22,7 @@ from pycoreconf import CORECONFModel
 
 from .gen_rulemanager import RuleManager
 from .sor_convert import detect, convert
+from .sor_print import print_rules
 
 DEFAULT_SID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "ietf-schc@2026-11-16.sid")
@@ -50,15 +51,24 @@ def show_sor(args, user_sid):
             best.name, len(errors)), file=sys.stderr)
         for e in errors[:5]:
             print("  " + e, file=sys.stderr)
-        if not args.quiet:
+        if args.verbose:
             dump(ycbor, args.sid)
         return 1
 
     print("Data model: {} (detected)".format(best.name))
+    newest = max((r[0] for r in results), key=lambda s: s.revision)
     if not args.quiet:
+        # compact view: the rules as tables (a file of an older model is converted in memory)
+        shown, shown_sid = ycbor, best.path
+        if best.revision < newest.revision:
+            shown, _ = convert(ycbor, best.path, newest.path)
+            shown_sid = newest.path
+        model = CORECONFModel([shown_sid])
+        print_rules(model.decode(shown, as_rfc7951=True),
+                    os.path.splitext(os.path.basename(args.rule_file))[0])
+    if args.verbose:
         dump(ycbor, user_sid or [best.path])
 
-    newest = max((r[0] for r in results), key=lambda s: s.revision)
     if best.revision >= newest.revision:
         return 0
 
@@ -97,6 +107,9 @@ def main():
                         help="output .sor2 file (default: rule file with .sor2 extension)")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="do not print the rules nor the CBOR dump")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="display a .sor2/.sor file with its CBOR dump and RESTCONF JSON, "
+                             "after the tables of rules")
     parser.add_argument("-c", "--convert", action="store_true",
                         help="convert a .sor file of an older data model to .sor2 without asking")
     args = parser.parse_args()
