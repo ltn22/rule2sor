@@ -132,8 +132,21 @@ def internal_rules(decoded):
     return rules
 
 
+def internal_templates(decoded):
+    """Templates of groups of rules {identifier: [(RuleID value, RuleID length), ...]} of a
+    decoded CORECONF object (augment of ietf-schc by ietf-schc-ccm2m-mgmt)."""
+    templates = {}
+    for template in decoded["ietf-schc:schc"].get("ietf-schc-ccm2m-mgmt:template", []):
+        rules = sorted(template.get("rule", []), key=lambda rule: rule["index"])
+        templates[template["template-id"]] = [(r["rule-id-value"], r["rule-id-length"]) for r in rules]
+    return templates
+
+
 def print_rules(decoded, name):
     """Display the rules of a decoded CORECONF object as RuleManager.Print() does."""
     rm = RuleManager()
     rm._ctxt = [{"DeviceID": name, "SoR": internal_rules(decoded)}]
+    templates = internal_templates(decoded)
+    if templates:
+        rm._ctxt[0][T_TEMPLATE] = templates
     rm.Print()

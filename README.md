@@ -95,3 +95,15 @@ the rules of the management stack (ietf-schc-mgmt): the rule is written with the
 Descriptions.
 
     {"RuleIDValue": 0, "RuleIDLength": 5, "Management": [ {"FID": "ipv6-version", ...}, ... ]}
+
+After the `SoR` list, the `ccm2m-mgmt:template` entry gives the templates of groups of rules, defined by
+the module `ietf-schc-ccm2m-mgmt` which augments `ietf-schc` (`/schc/template`): the RuleIDs
+`[RuleID value, RuleID length]` of the rules to duplicate when a group of rules is created
+(RPC `create-rule-group`). The rules must be in the `SoR`. A list is the template 0, a dictionary
+gives several templates by their identifier (`{"0": [[240, 8]], "1": [[241, 8]]}`). The SID file of
+the module (`ietf-schc-ccm2m-mgmt@*.sid`) is bundled and loaded with the default SID file.
+
+    {"DeviceID": "stm32-mgmt", "SoR": [ ... ], "ccm2m-mgmt:template": [[240, 8], [241, 8], [242, 8]]}
+
+The tables show `Template 0: 240/8, 241/8, 242/8` after the rules, and `Template 0 (ccm2m-mgmt)` at the
+right of the title of each rule of a template.

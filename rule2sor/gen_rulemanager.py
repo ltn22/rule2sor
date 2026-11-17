@@ -483,6 +483,42 @@ class RuleManager:
                     raise ValueError ("Rule type undefined")
                 #print (n_rule)
 
+        if type(dev_info) is dict and T_TEMPLATE in dev_info:
+            d[T_TEMPLATE] = self._create_templates(dev_info[T_TEMPLATE], d)
+
+    def _create_templates(self, templates, device):
+        """
+        Templates of groups of rules (augment of ietf-schc by ietf-schc-ccm2m-mgmt): the
+        RuleIDs of the rules to duplicate when a group is created. A list of [RuleID value,
+        RuleID length] is the template 0, a dictionary gives several templates by their
+        identifier: {"0": [[240, 8], ...], "1": [...]}. The rules must be in the set of rules.
+        Return {template identifier: [(RuleID value, RuleID length), ...]}.
+        """
+        if type(templates) is list:
+            templates = {0: templates}
+        elif type(templates) is dict:
+            templates = {int(k): v for k, v in templates.items()}
+        else:
+            raise ValueError("invalid {}".format(T_TEMPLATE))
+
+        existing = {(r[T_RULEID], r[T_RULEIDLENGTH]) for r in device["SoR"]}
+        result = {}
+        for template_id, rule_ids in templates.items():
+            if not 0 <= template_id < 256:
+                raise ValueError("{} {}: the identifier is on 8 bits".format(T_TEMPLATE, template_id))
+            if not rule_ids:
+                raise ValueError("{} {}: no rule".format(T_TEMPLATE, template_id))
+            result[template_id] = []
+            for rule_id in rule_ids:
+                if type(rule_id) is not list or len(rule_id) != 2 or not all(type(v) is int for v in rule_id):
+                    raise ValueError("{} {}: {} is not [RuleID value, RuleID length]".format(T_TEMPLATE, template_id, rule_id))
+                value, length = rule_id
+                if (value, length) not in existing:
+                    raise ValueError("{} {}: the rule {}/{} is not in the set of rules".format(
+                        T_TEMPLATE, template_id, value, length))
+                result[template_id].append((value, length))
+        return result
+
     def _create_fragmentation_rule (self, nrule):
         arule = {}
         if T_RULEID in nrule:
@@ -839,6 +875,14 @@ class RuleManager:
             return v[len(prefix):]
         return v
 
+    @staticmethod
+    def print_templates(templates):
+        """
+        Print the templates of groups of rules: the RuleIDs of the rules to duplicate
+        """
+        for template_id, rule_ids in sorted(templates.items()):
+            print ("Template {}: {}".format(template_id, ", ".join("{}/{}".format(v, l) for v, l in rule_ids)))
+
     def _print_rule(self, rule):
         """
         Print a rule as a table (the body of the loop of Print)
@@ -883,7 +927,11 @@ class RuleManager:
                     else:
                         self._smart_print(e[T_TV])
                 if not T_TV in e or e[T_TV] == None:
-                    print ("-"*30, end="")
+                    if e[T_MO] == YANG_ID[T_MO_EQUAL] and e[T_CDA] == YANG_ID[T_CDA_NOT_SENT]:
+                        # equal/not-sent without a value: the value is to be given (template of rules)
+                        print ("{:>30}".format("?"), end="")
+                    else:
+                        print ("-"*30, end="")
 
                 txt = self._short_name(e[T_MO], "mo-")
                 if T_MO_VAL in e:
@@ -974,16 +1022,22 @@ class RuleManager:
 
     def _print_rule_framed(self, rule):
         """
-        Print a rule, with the frame of the management rules if its nature is management
+        Print a rule. The frame of a management rule is not the one of the other rules, and
+        the templates which contain the rule (RuleID in a ccm2m-mgmt:template entry) are
+        written at the right of the title of the rule, e.g. Template 0 (ccm2m-mgmt).
         """
-        if rule.get(T_NATURE) != "nature-management":
-            self._print_rule(rule)
-            return
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             self._print_rule(rule)
-        print(self._management_frame(buffer.getvalue().rstrip("\n")))
-
+        text = buffer.getvalue().rstrip("\n")
+        if rule.get(T_NATURE) == "nature-management":
+            text = self._management_frame(text)
+        templates = getattr(self, "_rule_templates", {}).get((rule[T_RULEID], rule[T_RULEIDLENGTH]))
+        if templates:
+            lines = text.split("\n")   # line 0 is the top of the title, line 1 the title
+            lines[1] += "  Template {} ({})".format(", ".join(str(t) for t in templates), T_TEMPLATE.split(":")[0])
+            text = "\n".join(lines)
+        print(text)
 
     def Print (self):
         """
@@ -993,8 +1047,16 @@ class RuleManager:
             print ("*"*40)
             print ("Device:", dev["DeviceID"])
 
+            self._rule_templates = {}
+            for template_id, rule_ids in sorted(dev.get(T_TEMPLATE, {}).items()):
+                for rule_id in rule_ids:
+                    self._rule_templates.setdefault(rule_id, []).append(template_id)
+
             for rule in dev["SoR"]:
                 self._print_rule_framed(rule)
+
+            if T_TEMPLATE in dev:
+                self.print_templates(dev[T_TEMPLATE])
 
             if T_INDEXES in dev and len(dev[T_INDEXES]) > 0:
                 print ("INDEXES:")
@@ -1297,10 +1359,28 @@ class RuleManager:
 
                 full_rules += rule_content        
             
-        coreconf = b'\xA1' + cbor.dumps(module_sid) + b'\xA1' + cbor.dumps(rule_sid - module_sid) 
+        templates = dev.get(T_TEMPLATE) if len(self._ctxt) > 0 else None
+        coreconf = b'\xA1' + cbor.dumps(module_sid) + (b'\xA2' if templates else b'\xA1') + cbor.dumps(rule_sid - module_sid)
 
         array_header = self.cbor_header(0b100_00000, rule_count) # array
 
         coreconf +=  array_header+full_rules
+
+        if templates:
+            # augment of ietf-schc by ietf-schc-ccm2m-mgmt: /schc/template[template-id]/rule[index]
+            TEMPLATE = "/ietf-schc:schc/ietf-schc-ccm2m-mgmt:template"
+            sids = {name: self.sid_search_for(name=TEMPLATE + name, space="data")
+                    for name in ("", "/template-id", "/rule", "/rule/index", "/rule/rule-id-length", "/rule/rule-id-value")}
+            if None in sids.values():
+                raise ValueError("{} not found in the SID files, the SID file of ietf-schc-ccm2m-mgmt is required".format(TEMPLATE))
+            entries = []
+            for template_id, rule_ids in sorted(templates.items()):
+                rules = [{sids["/rule/index"] - sids["/rule"]: index,
+                          sids["/rule/rule-id-length"] - sids["/rule"]: length,
+                          sids["/rule/rule-id-value"] - sids["/rule"]: value}
+                         for index, (value, length) in enumerate(rule_ids)]
+                entries.append({sids["/template-id"] - sids[""]: template_id,
+                                sids["/rule"] - sids[""]: rules})
+            coreconf += cbor.dumps(sids[""] - module_sid) + cbor.dumps(entries)
         return coreconf
         # end of CORECONF

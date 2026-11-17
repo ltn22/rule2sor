@@ -51,21 +51,37 @@ INT_TYPES = {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "ui
              "decimal64"}
 
 
-class SidFile:
-    """Data nodes, identities and leaf types of a SID file."""
+def extension_sid_files():
+    """The SID files of the modules which augment ietf-schc (ietf-schc-ccm2m-mgmt: the
+    templates of groups of rules), newest revision first. They are not candidate data
+    models: their data nodes are added to the ones of the candidate model."""
+    return sorted(os.path.join(PACKAGE_DIR, f) for f in os.listdir(PACKAGE_DIR)
+                  if f.startswith("ietf-schc-ccm2m-mgmt@") and f.endswith(".sid"))[-1:]
 
-    def __init__(self, path):
+
+class SidFile:
+    """Data nodes, identities and leaf types of a SID file, with the ones of the
+    modules which augment it (extension_sid_files)."""
+
+    def __init__(self, path, extensions=True):
         self.path = path
-        with open(path) as f:
-            obj = json.load(f)
-        content = obj.get("ietf-sid-file:sid-file", obj)
-        self.module = content.get("module-name", "?")
-        self.revision = content.get("module-revision", "")
         self.data = {}
         self.data_by_sid = {}
         self.ident = {}
         self.ident_by_sid = {}
         self.types = {}
+        self._load(path, main=True)
+        if extensions:
+            for extension in extension_sid_files():
+                self._load(extension, main=False)
+
+    def _load(self, path, main):
+        with open(path) as f:
+            obj = json.load(f)
+        content = obj.get("ietf-sid-file:sid-file", obj)
+        if main:
+            self.module = content.get("module-name", "?")
+            self.revision = content.get("module-revision", "")
         for item in content.get("item", content.get("items", [])):
             sid = int(item["sid"], 0) if isinstance(item["sid"], str) else item["sid"]
             name = item["identifier"]
@@ -93,8 +109,10 @@ class SidFile:
             for t in item["ietf-sid-file-extension:type"]:
                 if "base-type" in t:
                     bases.add(t["base-type"].split(":")[-1])
-                if "enumerate" in t:
-                    enums[str(t["enumerate"]["enum-value"])] = t["enumerate"]["enum-name"]
+                if "enumerate" in t:   # one enumeration, or the list of the values of an enumeration
+                    values = t["enumerate"]
+                    for e in (values if isinstance(values, list) else [values]):
+                        enums[str(e["enum-value"])] = e["enum-name"]
                 if "identityref" in t:
                     bases.add("identityref")
                 if "bits" in t:
@@ -200,8 +218,9 @@ def decode(cbor_obj, sidf):
 
 
 def bundled_sid_files():
+    """The SID files of the candidate data models (ietf-schc@*.sid)."""
     return sorted(os.path.join(PACKAGE_DIR, f) for f in os.listdir(PACKAGE_DIR)
-                  if f.endswith(".sid"))
+                  if f.startswith("ietf-schc@") and f.endswith(".sid"))
 
 
 def detect(ycbor, sid_paths=None):

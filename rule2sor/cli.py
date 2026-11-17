@@ -21,7 +21,7 @@ from cbor_diag import cbor2diag
 from pycoreconf import CORECONFModel
 
 from .gen_rulemanager import RuleManager
-from .sor_convert import detect, convert
+from .sor_convert import detect, convert, extension_sid_files
 from .sor_print import print_rules
 
 DEFAULT_SID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -63,11 +63,11 @@ def show_sor(args, user_sid):
         if best.revision < newest.revision:
             shown, _ = convert(ycbor, best.path, newest.path)
             shown_sid = newest.path
-        model = CORECONFModel([shown_sid])
+        model = CORECONFModel([shown_sid] + extension_sid_files())
         print_rules(model.decode(shown, as_rfc7951=True),
                     os.path.splitext(os.path.basename(args.rule_file))[0])
     if args.full:
-        dump(ycbor, user_sid or [best.path])
+        dump(ycbor, user_sid or [best.path] + extension_sid_files())
 
     if best.revision >= newest.revision:
         return 0
@@ -115,7 +115,7 @@ def main():
     args = parser.parse_args()
     user_sid = args.sid
     if args.sid is None:
-        args.sid = [DEFAULT_SID_FILE]
+        args.sid = [DEFAULT_SID_FILE] + extension_sid_files()
 
     if args.rule_file.lower().endswith((".sor", ".sor2")):
         return show_sor(args, user_sid)
