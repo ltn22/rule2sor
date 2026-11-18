@@ -107,3 +107,9 @@ the module (`ietf-schc-ccm2m-mgmt@*.sid`) is bundled and loaded with the default
 
 The tables show `Template 0: 240/8, 241/8, 242/8` after the rules, and `Template 0 (ccm2m-mgmt)` at the
 right of the title of each rule of a template.
+
+The `context` entry gives the parameters of the whole context, the container `/ietf-schc:context` of
+`ietf-schc`: `"context": {"guard": 300}` is the guard period in seconds, the time during which the
+RuleID of a deleted rule cannot be used again. It is stored as `guard-period/ticks-numbers`, a whole
+number of ticks of 1.048576 s (the default `ticks-duration` of 20), rounded up: 300 s is 287 ticks, which
+is 300.9 s. The rules are displayed with `Guard period: 300.9 s (287 ticks of 1.048576 s)`.

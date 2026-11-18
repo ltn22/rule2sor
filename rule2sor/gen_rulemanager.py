@@ -486,6 +486,37 @@ class RuleManager:
         if type(dev_info) is dict and T_TEMPLATE in dev_info:
             d[T_TEMPLATE] = self._create_templates(dev_info[T_TEMPLATE], d)
 
+        if type(dev_info) is dict and T_CONTEXT in dev_info:
+            d[T_CONTEXT] = self._create_context(dev_info[T_CONTEXT])
+
+    GUARD_TICK_DURATION = 20   # default of ticks-duration: a tick is 2**20 us = 1.048576 s
+
+    @classmethod
+    def guard_seconds(cls, ticks, tick_duration=None):
+        """Duration in seconds of the guard period of 'ticks' ticks."""
+        return ticks * 2 ** (cls.GUARD_TICK_DURATION if tick_duration is None else tick_duration) / 1e6
+
+    def _create_context(self, context):
+        """
+        Parameters of the whole context (container context of ietf-schc): {"guard": 300} is
+        the guard period, in seconds. It is stored with the default tick of 1.048576 s
+        (ticks-duration 20), rounded up to a whole number of ticks.
+        Return {"guard": seconds, "ticks": ticks, "tick-duration": ticks-duration}.
+        """
+        if type(context) is not dict or not set(context) <= {"guard"}:
+            raise ValueError("invalid {}, only \"guard\" is known".format(T_CONTEXT))
+        result = {}
+        if "guard" in context:
+            seconds = context["guard"]
+            if type(seconds) not in (int, float) or seconds < 0:
+                raise ValueError("{}: guard {} is not a duration in seconds".format(T_CONTEXT, seconds))
+            ticks = -int(-seconds * 1e6 // 2 ** self.GUARD_TICK_DURATION)  # rounded up
+            if ticks > 0xFFFF:
+                raise ValueError("{}: guard {} s is too long, at most {:.0f} s".format(
+                    T_CONTEXT, seconds, self.guard_seconds(0xFFFF)))
+            result = {"guard": seconds, "ticks": ticks, "tick-duration": self.GUARD_TICK_DURATION}
+        return result
+
     def _create_templates(self, templates, device):
         """
         Templates of groups of rules (augment of ietf-schc by ietf-schc-ccm2m-mgmt): the
@@ -876,12 +907,57 @@ class RuleManager:
         return v
 
     @staticmethod
-    def print_templates(templates):
+    def _print_window(title, sections):
         """
-        Print the templates of groups of rules: the RuleIDs of the rules to duplicate
+        Print a window framed like the tables of the rules: a title, then sections, each one
+        with a heading and rows of columns, aligned in the whole window.
+        sections is a list of (heading, [(column, ...), ...]), the heading may be None.
         """
-        for template_id, rule_ids in sorted(templates.items()):
-            print ("Template {}: {}".format(template_id, ", ".join("{}/{}".format(v, l) for v, l in rule_ids)))
+        rows = [row for _, section in sections for row in section]
+        widths = [max(len(str(row[i])) for row in rows) for i in range(len(rows[0]))]
+        inner = sum(w + 2 for w in widths) + len(widths) - 1
+        inner = max([inner, len(title) + 2] + [len(h) + 2 for h, _ in sections if h])
+        widths[-1] += inner - (sum(w + 2 for w in widths) + len(widths) - 1)   # room for a long title
+        separator = lambda mid: "|" + mid.join("-" * (w + 2) for w in widths) + "|"
+        print("/" + "-" * inner + "\\")
+        print("|{:<{}}|".format(" " + title, inner))
+        for heading, section in sections:
+            if heading:
+                print("|" + "-" * inner + "|")
+                print("|{:<{}}|".format(" " + heading, inner))
+            print(separator("+"))
+            for row in section:
+                print("|" + "|".join(" {:<{}} ".format(str(c), w) for c, w in zip(row, widths)) + "|")
+        print("\\" + "-" * inner + "/")
+
+    @staticmethod
+    def print_context(context):
+        """
+        Print the parameters of the whole context (the guard period) in a window
+        """
+        if "ticks" in context:
+            duration = context["tick-duration"]
+            RuleManager._print_window("Context", [("Guard period", [
+                ("duration", "{:.1f} s".format(RuleManager.guard_seconds(context["ticks"], duration))),
+                ("ticks-numbers", context["ticks"]),
+                ("ticks-duration", "2^{} us = {:.6f} s".format(duration, RuleManager.guard_seconds(1, duration)))])])
+
+    @staticmethod
+    def print_templates(templates, rules=()):
+        """
+        Print the templates of groups of rules in a window: for each template, the RuleIDs of the
+        rules to duplicate, in the order of their index, with the nature of the rule if it is
+        one of 'rules'
+        """
+        def bits(value, length):
+            return "".join(str((value >> i) & 1) for i in range(length - 1, -1, -1))
+        natures = {(r[T_RULEID], r[T_RULEIDLENGTH]): str(r.get(T_NATURE, "nature-compression")).replace("nature-", "")
+                   for r in rules}
+        sections = [("Template {}".format(template_id), [("index", "RuleID", "bits", "nature")] + [
+                        (index, "{}/{}".format(value, length), bits(value, length), natures.get((value, length), "?"))
+                        for index, (value, length) in enumerate(rule_ids)])
+                    for template_id, rule_ids in sorted(templates.items())]
+        RuleManager._print_window("Templates of groups of rules", sections)
 
     def _print_rule(self, rule):
         """
@@ -1056,7 +1132,10 @@ class RuleManager:
                 self._print_rule_framed(rule)
 
             if T_TEMPLATE in dev:
-                self.print_templates(dev[T_TEMPLATE])
+                self.print_templates(dev[T_TEMPLATE], dev["SoR"])
+
+            if T_CONTEXT in dev:
+                self.print_context(dev[T_CONTEXT])
 
             if T_INDEXES in dev and len(dev[T_INDEXES]) > 0:
                 print ("INDEXES:")
@@ -1360,7 +1439,8 @@ class RuleManager:
                 full_rules += rule_content        
             
         templates = dev.get(T_TEMPLATE) if len(self._ctxt) > 0 else None
-        coreconf = b'\xA1' + cbor.dumps(module_sid) + (b'\xA2' if templates else b'\xA1') + cbor.dumps(rule_sid - module_sid)
+        context = (dev.get(T_CONTEXT) or None) if len(self._ctxt) > 0 else None
+        coreconf = (b'\xA2' if context else b'\xA1') + cbor.dumps(module_sid) + (b'\xA2' if templates else b'\xA1') + cbor.dumps(rule_sid - module_sid)
 
         array_header = self.cbor_header(0b100_00000, rule_count) # array
 
@@ -1382,5 +1462,19 @@ class RuleManager:
                 entries.append({sids["/template-id"] - sids[""]: template_id,
                                 sids["/rule"] - sids[""]: rules})
             coreconf += cbor.dumps(sids[""] - module_sid) + cbor.dumps(entries)
+
+        if context:
+            # container context of ietf-schc, next to the container schc: /context/guard-period
+            CONTEXT = "/ietf-schc:context"
+            sids = {name: self.sid_search_for(name=CONTEXT + name, space="data")
+                    for name in ("", "/guard-period", "/guard-period/ticks-duration", "/guard-period/ticks-numbers")}
+            if None in sids.values():
+                raise ValueError("{} not found in the SID files".format(CONTEXT))
+            if sids[""] < module_sid:
+                raise ValueError("the container context must follow the container schc in the SID file")
+            guard = {sids["/guard-period/ticks-numbers"] - sids["/guard-period"]: context["ticks"]}
+            if context["tick-duration"] != self.GUARD_TICK_DURATION:   # the default is not written
+                guard[sids["/guard-period/ticks-duration"] - sids["/guard-period"]] = context["tick-duration"]
+            coreconf += cbor.dumps(sids[""]) + cbor.dumps({sids["/guard-period"] - sids[""]: dict(sorted(guard.items()))})
         return coreconf
         # end of CORECONF

@@ -142,6 +142,17 @@ def internal_templates(decoded):
     return templates
 
 
+def internal_context(decoded):
+    """Parameters of the whole context of a decoded CORECONF object (container context of
+    ietf-schc): the guard period, as RuleManager reads it from a JSON file."""
+    guard = decoded.get("ietf-schc:context", {}).get("guard-period")
+    if not guard or "ticks-numbers" not in guard:
+        return {}
+    duration = guard.get("ticks-duration", RuleManager.GUARD_TICK_DURATION)
+    return {"guard": RuleManager.guard_seconds(guard["ticks-numbers"], duration),
+            "ticks": guard["ticks-numbers"], "tick-duration": duration}
+
+
 def print_rules(decoded, name):
     """Display the rules of a decoded CORECONF object as RuleManager.Print() does."""
     rm = RuleManager()
@@ -149,4 +160,7 @@ def print_rules(decoded, name):
     templates = internal_templates(decoded)
     if templates:
         rm._ctxt[0][T_TEMPLATE] = templates
+    context = internal_context(decoded)
+    if context:
+        rm._ctxt[0][T_CONTEXT] = context
     rm.Print()
