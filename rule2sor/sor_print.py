@@ -144,13 +144,18 @@ def internal_templates(decoded):
 
 def internal_context(decoded):
     """Parameters of the whole context of a decoded CORECONF object (container context of
-    ietf-schc): the guard period, as RuleManager reads it from a JSON file."""
-    guard = decoded.get("ietf-schc:context", {}).get("guard-period")
-    if not guard or "ticks-numbers" not in guard:
-        return {}
-    duration = guard.get("ticks-duration", RuleManager.GUARD_TICK_DURATION)
-    return {"guard": RuleManager.guard_seconds(guard["ticks-numbers"], duration),
-            "ticks": guard["ticks-numbers"], "tick-duration": duration}
+    ietf-schc and its augment by ietf-schc-ccm2m-mgmt): the guard period and the kind of
+    device, as RuleManager reads them from a JSON file."""
+    container = decoded.get("ietf-schc:context", {})
+    context = {}
+    guard = container.get("guard-period")
+    if guard and "ticks-numbers" in guard:
+        duration = guard.get("ticks-duration", RuleManager.GUARD_TICK_DURATION)
+        context.update({"guard": RuleManager.guard_seconds(guard["ticks-numbers"], duration),
+                        "ticks": guard["ticks-numbers"], "tick-duration": duration})
+    if "ietf-schc-ccm2m-mgmt:device" in container:
+        context["device"] = container["ietf-schc-ccm2m-mgmt:device"]
+    return context
 
 
 def print_rules(decoded, name):

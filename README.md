@@ -112,4 +112,12 @@ The `context` entry gives the parameters of the whole context, the container `/i
 `ietf-schc`: `"context": {"guard": 300}` is the guard period in seconds, the time during which the
 RuleID of a deleted rule cannot be used again. It is stored as `guard-period/ticks-numbers`, a whole
 number of ticks of 1.048576 s (the default `ticks-duration` of 20), rounded up: 300 s is 287 ticks, which
-is 300.9 s. The rules are displayed with `Guard period: 300.9 s (287 ticks of 1.048576 s)`.
+is 300.9 s. The rules are displayed with the guard period in a window `Context`.
+
+`"context": {"ccm2m-mgmt:device": "constrained"}` tells that the device is constrained: the groups of rules (module
+`ietf-schc-ccm2m-mgmt`) are created with the number of the group and the template only, the values of
+the application stay ignored in the rules of the group. `"full-stack"` (the default) creates a group for
+each application, with its values (leaf `/ietf-schc:context/ietf-schc-ccm2m-mgmt:device`, an enumeration).
+The key is prefixed by the module, as `ccm2m-mgmt:template`, because the leaf is an augment of the
+container `context` by `ietf-schc-ccm2m-mgmt`. Both entries can be given:
+`"context": {"guard": 300, "ccm2m-mgmt:device": "constrained"}`.

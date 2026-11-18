@@ -496,16 +496,28 @@ class RuleManager:
         """Duration in seconds of the guard period of 'ticks' ticks."""
         return ticks * 2 ** (cls.GUARD_TICK_DURATION if tick_duration is None else tick_duration) / 1e6
 
+    DEVICE_KINDS = {"full-stack": 0, "constrained": 1}   # values of the enumeration of the leaf device
+
     def _create_context(self, context):
         """
         Parameters of the whole context (container context of ietf-schc): {"guard": 300} is
         the guard period, in seconds. It is stored with the default tick of 1.048576 s
-        (ticks-duration 20), rounded up to a whole number of ticks.
-        Return {"guard": seconds, "ticks": ticks, "tick-duration": ticks-duration}.
+        (ticks-duration 20), rounded up to a whole number of ticks. {"ccm2m-mgmt:device": "constrained"} tells
+        that the groups of rules are created without the values of the application, "full-stack"
+        (the default) that they are created with them (leaf device of ietf-schc-ccm2m-mgmt).
+        Return {"guard": seconds, "ticks": ticks, "tick-duration": ticks-duration,
+        "device": "constrained" or "full-stack"}, with the keys which are in the context (the
+        key of the JSON file is ccm2m-mgmt:device, as for the templates, the leaf is an augment of
+        the container context by ietf-schc-ccm2m-mgmt).
         """
-        if type(context) is not dict or not set(context) <= {"guard"}:
-            raise ValueError("invalid {}, only \"guard\" is known".format(T_CONTEXT))
+        if type(context) is not dict or not set(context) <= {"guard", T_DEVICE}:
+            raise ValueError("invalid {}, only \"guard\" and \"{}\" are known".format(T_CONTEXT, T_DEVICE))
         result = {}
+        if T_DEVICE in context:
+            if context[T_DEVICE] not in self.DEVICE_KINDS:
+                raise ValueError("{}: {} {} is not {}".format(
+                    T_CONTEXT, T_DEVICE, context[T_DEVICE], " or ".join(self.DEVICE_KINDS)))
+            result["device"] = context[T_DEVICE]
         if "guard" in context:
             seconds = context["guard"]
             if type(seconds) not in (int, float) or seconds < 0:
@@ -514,7 +526,7 @@ class RuleManager:
             if ticks > 0xFFFF:
                 raise ValueError("{}: guard {} s is too long, at most {:.0f} s".format(
                     T_CONTEXT, seconds, self.guard_seconds(0xFFFF)))
-            result = {"guard": seconds, "ticks": ticks, "tick-duration": self.GUARD_TICK_DURATION}
+            result.update({"guard": seconds, "ticks": ticks, "tick-duration": self.GUARD_TICK_DURATION})
         return result
 
     def _create_templates(self, templates, device):
@@ -933,14 +945,20 @@ class RuleManager:
     @staticmethod
     def print_context(context):
         """
-        Print the parameters of the whole context (the guard period) in a window
+        Print the parameters of the whole context (the guard period, the kind of device) in
+        a window
         """
+        sections = []
         if "ticks" in context:
             duration = context["tick-duration"]
-            RuleManager._print_window("Context", [("Guard period", [
+            sections.append(("Guard period", [
                 ("duration", "{:.1f} s".format(RuleManager.guard_seconds(context["ticks"], duration))),
                 ("ticks-numbers", context["ticks"]),
-                ("ticks-duration", "2^{} us = {:.6f} s".format(duration, RuleManager.guard_seconds(1, duration)))])])
+                ("ticks-duration", "2^{} us = {:.6f} s".format(duration, RuleManager.guard_seconds(1, duration)))]))
+        if "device" in context:
+            sections.append(("Groups of rules", [("device", context["device"])]))
+        if sections:
+            RuleManager._print_window("Context", sections)
 
     @staticmethod
     def print_templates(templates, rules=()):
@@ -1468,13 +1486,23 @@ class RuleManager:
             CONTEXT = "/ietf-schc:context"
             sids = {name: self.sid_search_for(name=CONTEXT + name, space="data")
                     for name in ("", "/guard-period", "/guard-period/ticks-duration", "/guard-period/ticks-numbers")}
-            if None in sids.values():
+            if None in (sids[""], sids["/guard-period"], sids["/guard-period/ticks-duration"], sids["/guard-period/ticks-numbers"]):
                 raise ValueError("{} not found in the SID files".format(CONTEXT))
             if sids[""] < module_sid:
                 raise ValueError("the container context must follow the container schc in the SID file")
-            guard = {sids["/guard-period/ticks-numbers"] - sids["/guard-period"]: context["ticks"]}
-            if context["tick-duration"] != self.GUARD_TICK_DURATION:   # the default is not written
-                guard[sids["/guard-period/ticks-duration"] - sids["/guard-period"]] = context["tick-duration"]
-            coreconf += cbor.dumps(sids[""]) + cbor.dumps({sids["/guard-period"] - sids[""]: dict(sorted(guard.items()))})
+            content = {}
+            if "ticks" in context:
+                guard = {sids["/guard-period/ticks-numbers"] - sids["/guard-period"]: context["ticks"]}
+                if context["tick-duration"] != self.GUARD_TICK_DURATION:   # the default is not written
+                    guard[sids["/guard-period/ticks-duration"] - sids["/guard-period"]] = context["tick-duration"]
+                content[sids["/guard-period"] - sids[""]] = dict(sorted(guard.items()))
+            if "device" in context:
+                # augment of the container context by ietf-schc-ccm2m-mgmt, an enumeration
+                device = self.sid_search_for(name=CONTEXT + "/ietf-schc-ccm2m-mgmt:device", space="data")
+                if device is None:
+                    raise ValueError("{}/ietf-schc-ccm2m-mgmt:device not found in the SID files, the SID file of "
+                                     "ietf-schc-ccm2m-mgmt is required".format(CONTEXT))
+                content[device - sids[""]] = self.DEVICE_KINDS[context["device"]]
+            coreconf += cbor.dumps(sids[""]) + cbor.dumps(dict(sorted(content.items())))
         return coreconf
         # end of CORECONF
