@@ -623,10 +623,8 @@ class RuleManager:
                     _default_value (arule, nrule, T_FRAG_MAX_RETRY, 4)
                     _default_value (arule, nrule, T_FRAG_TIMEOUT, 600)
                     _default_value (arule, nrule, T_FRAG_L2WORDSIZE, 8)
-                    _default_value (arule, nrule, T_FRAG_LAST_TILE_IN_ALL1, None, True)
-
-                    if nrule[T_FRAG][T_FRAG_PROF][T_FRAG_LAST_TILE_IN_ALL1] == True:
-                        raise NotImplementedError ("Last tile in All-1 is not implemented yet")
+                    # False (default): the All-1 fragment only has the RCS; True: it also carries the last tile
+                    _default_value (arule, nrule, T_FRAG_LAST_TILE_IN_ALL1, False)
 
                 # the size include All-*, Max_VLAUE is WINDOW_SIZE-1
                 _default_value(arule, nrule, T_FRAG_WINDOW_SIZE, (0x01 <<(arule[T_FRAG][T_FRAG_PROF][T_FRAG_FCN]))-1)
@@ -1431,6 +1429,44 @@ class RuleManager:
                         cbor.dumps(self.sid_search_for(name=FRAG+"/fragmentation-mode", space="data") - frag_sid) +\
                         cbor.dumps(self.sid_search_for(name= YANG_ID[rule[T_FRAG][T_FRAG_MODE]], space="identity")) 
                     nb_elm += 1
+
+                    profile = rule[T_FRAG][T_FRAG_PROF]
+                    if rule[T_FRAG][T_FRAG_MODE] in [T_FRAG_ACK_ALWAYS, T_FRAG_ACK_ON_ERROR]:
+                        # retries and retransmission timer (a number of ticks of 2**20 us, as the guard period)
+                        rule_content += \
+                            cbor.dumps(self.sid_search_for(name=FRAG+"/max-ack-requests", space="data") - frag_sid) +\
+                            cbor.dumps(profile[T_FRAG_MAX_RETRY])
+                        nb_elm += 1
+                        ticks = -int(-profile[T_FRAG_TIMEOUT] * 1e6 // 2 ** self.GUARD_TICK_DURATION)
+                        if not 0 < ticks <= 0xFFFF:
+                            raise ValueError("timeout {} s of the fragmentation rule {} cannot be written in ticks".format(
+                                profile[T_FRAG_TIMEOUT], rule[T_RULEID]))
+                        timer_sid = self.sid_search_for(name=FRAG+"/retransmission-timer", space="data")
+                        rule_content += \
+                            cbor.dumps(timer_sid - frag_sid) +\
+                            cbor.dumps({self.sid_search_for(name=FRAG+"/retransmission-timer/ticks-numbers",
+                                                            space="data") - timer_sid: ticks})
+                        nb_elm += 1
+                    if rule[T_FRAG][T_FRAG_MODE] == T_FRAG_ACK_ON_ERROR:
+                        if profile.get(T_FRAG_TILE):
+                            if profile[T_FRAG_TILE] > 255:
+                                raise ValueError("tileSize {} bits of the fragmentation rule {} does not fit in an uint8".format(
+                                    profile[T_FRAG_TILE], rule[T_RULEID]))
+                            rule_content += \
+                                cbor.dumps(self.sid_search_for(name=FRAG+"/tile-size", space="data") - frag_sid) +\
+                                cbor.dumps(profile[T_FRAG_TILE])
+                            nb_elm += 1
+                        rule_content += \
+                            cbor.dumps(self.sid_search_for(name=FRAG+"/tile-in-all-1", space="data") - frag_sid) +\
+                            cbor.dumps(self.sid_search_for(
+                                name="all-1-data-yes" if profile[T_FRAG_LAST_TILE_IN_ALL1] else "all-1-data-no",
+                                space="identity"))
+                        nb_elm += 1
+                        rule_content += \
+                            cbor.dumps(self.sid_search_for(name=FRAG+"/ack-behavior", space="data") - frag_sid) +\
+                            cbor.dumps(self.sid_search_for(name=ACK_BEHAVIOR_ID[profile[T_FRAG_ACK_BEHAVIOR]],
+                                                           space="identity"))
+                        nb_elm += 1
 
                     rule_content = self.cbor_header(0b101_00000, 4) + \
                         cbor.dumps(self.sid_search_for(name="/ietf-schc:schc/rule/rule-id-value", space="data") - rule_sid) +\

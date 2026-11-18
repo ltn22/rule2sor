@@ -171,6 +171,13 @@ T_FRAG_L2WORDSIZE = "L2WordSize"     #YANG l2-word-size
 T_FRAG_LAST_TILE_IN_ALL1 = "lastTileInAll1" #YANG tile-in-all-1
 T_FRAG_RFC8724 = "RCS_CRC32"
 
+# identities of the leaf ack-behavior (YANG) for the keyword ackBehavior of the JSON rule
+ACK_BEHAVIOR_ID = {
+    T_FRAG_AFTER_ALL0: "ack-behavior-after-all-0",
+    T_FRAG_AFTER_ALL1: "ack-behavior-after-all-1",
+    T_FRAG_AFTER_ANY: "ack-behavior-by-layer2",
+}
+
 T_POSITION_CORE = "core"
 T_POSITION_DEVICE = "device"
 
