@@ -115,8 +115,9 @@ number of ticks of 1.048576 s (the default `ticks-duration` of 20), rounded up: 
 is 300.9 s. The rules are displayed with the guard period in a window `Context`.
 
 `"context": {"ccm2m-mgmt:device": "constrained"}` tells that the device is constrained: the groups of rules (module
-`ietf-schc-ccm2m-mgmt`) are created with the number of the group and the template only, the values of
-the application stay ignored in the rules of the group. `"full-stack"` (the default) creates a group for
+`ietf-schc-ccm2m-mgmt`) are created with the number of the group and the template only: the device does
+not know the application, so it neither sends nor reads its fields (address, port, Flow Label, Traffic
+Class); only the Core has their values. `"full-stack"` (the default) creates a group for
 each application, with its values (leaf `/ietf-schc:context/ietf-schc-ccm2m-mgmt:device`, an enumeration).
 The key is prefixed by the module, as `ccm2m-mgmt:template`, because the leaf is an augment of the
 container `context` by `ietf-schc-ccm2m-mgmt`. Both entries can be given:
